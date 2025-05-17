@@ -24,7 +24,10 @@ jobs:
           cache: 'npm'
       
       - name: Install dependencies
-        run: npm run install:all
+        run: |
+          npm ci
+          npm run install:all
+          cd lpg-ui && npm install @vitejs/plugin-react --save-dev
       
       # Install and configure Doppler CLI for secure environment variable access
       # Follow these steps to set up the required secret:
