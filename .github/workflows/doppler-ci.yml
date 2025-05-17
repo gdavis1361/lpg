@@ -26,12 +26,14 @@ jobs:
       - name: Install dependencies
         run: npm run install:all
       
-      # This step requires adding the DOPPLER_TOKEN secret in GitHub repository settings
+      # Install and configure Doppler CLI for secure environment variable access
+      # Follow these steps to set up the required secret:
+      # 1. Create a service token in Doppler dashboard with read access to your project
+      # 2. Add this token as a repository secret named 'DOPPLER_TOKEN' in GitHub
       # See: https://docs.doppler.com/docs/github-actions
       - name: Install Doppler CLI
         uses: dopplerhq/cli-action@v2
         with:
-          # GitHub secret named DOPPLER_TOKEN must be added to repository settings
           token: ${{ secrets.DOPPLER_TOKEN }}
       
       # Verify no secrets in code, aligning with your CI/CD rules
@@ -42,12 +44,15 @@ jobs:
       
       # Run tests with Doppler environment variables
       - name: Run frontend tests
-        run: doppler run --project lpg --config test --secrets-group frontend -- npm run test --workspace=lpg-ui
+        working-directory: ./lpg-ui
+        run: doppler run --project lpg --config test -- npm run test
       
       # Build with Doppler environment variables
       - name: Build with Doppler
-        run: doppler run --project lpg --config prod --secrets-group frontend -- npm run build:ui
+        working-directory: ./lpg-ui
+        run: doppler run --project lpg --config prod -- npm run build
       
       # Enforce TypeScript strict mode as per your rules
       - name: TypeScript strict check
-        run: doppler run --project lpg --config dev --secrets-group frontend -- npm run type-check --workspace=lpg-ui
+        working-directory: ./lpg-ui
+        run: doppler run --project lpg --config dev -- npm run type-check

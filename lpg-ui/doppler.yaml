@@ -2,4 +2,3 @@ setup:
   project: lpg
   config: dev
   # Frontend-specific configuration
-  secrets-group: frontend

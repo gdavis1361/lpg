@@ -35,12 +35,12 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJh...example...kZCI6MTY5NDQ5
 ### Backend Secret Group
 
 ```
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-SUPABASE_JWT_SECRET=your-jwt-secret
+SUPABASE_URL=https://example-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJ...example-service-role-key...J9
+SUPABASE_JWT_SECRET=example-jwt-secret-at-least-32-chars-long
 POSTGRES_URL=postgresql://postgres:password@localhost:5432/postgres
 POSTGRES_USER=postgres
-POSTGRES_PASSWORD=your-db-password
+POSTGRES_PASSWORD=example-db-password
 LOG_LEVEL=info
 LOG_FORMAT=console
 ```

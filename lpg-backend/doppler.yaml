@@ -2,4 +2,3 @@ setup:
   project: lpg
   config: dev
   # Backend-specific configuration
-  secrets-group: backend
