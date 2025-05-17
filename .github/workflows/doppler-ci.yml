@@ -31,9 +31,12 @@ jobs:
       # 1. Create a service token in Doppler dashboard with read access to your project
       # 2. Add this token as a repository secret named 'DOPPLER_TOKEN' in GitHub
       # See: https://docs.doppler.com/docs/github-actions
+      # Docs: https://github.com/marketplace/actions/doppler-cli
       - name: Install Doppler CLI
         uses: dopplerhq/cli-action@v2
         with:
+          # This DOPPLER_TOKEN secret has been added to this repository's secrets
+          # You can verify its presence in the GitHub repository settings
           token: ${{ secrets.DOPPLER_TOKEN }}
       
       # Verify no secrets in code, aligning with your CI/CD rules

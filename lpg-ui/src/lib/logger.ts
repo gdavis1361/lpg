@@ -77,7 +77,7 @@ function maskSensitiveData(data: JsonValue): JsonValue {
     return data.map(maskSensitiveData);
   }
 
-  const maskedObject: { [key: string]: any } = {};
+  const maskedObject: { [key: string]: JsonValue } = {};
   for (const key in data) {
     if (Object.prototype.hasOwnProperty.call(data, key)) {
       // Match common patterns for sensitive data
@@ -117,7 +117,7 @@ interface LogEntry {
   caller?: string;        // Source file and line number
   environment?: string;   // dev|test|prod
   // Additional context and error information
-  context?: Record<string, any>;
+  context?: Record<string, JsonValue>;
   error?: {
     name?: string;
     message?: string;
@@ -131,7 +131,7 @@ interface LogEntry {
 function formatLog(
   level: LogLevel,
   message: string, 
-  context?: Record<string, any>, 
+  context?: Record<string, JsonValue>, 
   error?: Error
 ): LogEntry {
   // Start with the standard log structure
@@ -185,7 +185,7 @@ function formatLog(
     
     // Only include stack traces in development or for high-severity issues
     if ((process.env.NODE_ENV === 'development' || level === 'error') && error.stack) {
-      entry.error.stack = maskSensitiveData(error.stack);
+      entry.error.stack = maskSensitiveData(error.stack) as string;
     }
   }
 
