@@ -35,8 +35,9 @@ jobs:
       - name: Install Doppler CLI
         uses: dopplerhq/cli-action@v2
       
-      - name: Configure Doppler Token
-        run: doppler configure set token ${{ secrets.DOPPLER_TOKEN }} --scope=/${{ github.repository }}
+      # Set up Doppler token as an environment variable for all subsequent steps
+      - name: Set Doppler Token Environment
+        run: echo "DOPPLER_TOKEN=${{ secrets.DOPPLER_TOKEN }}" >> $GITHUB_ENV
       
       # Verify no secrets in code, aligning with your CI/CD rules
       - name: Verify no secrets in code
@@ -48,13 +49,19 @@ jobs:
       - name: Run frontend tests
         working-directory: ./lpg-ui
         run: doppler run --project lpg --config test -- npm run test
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
       
       # Build with Doppler environment variables
       - name: Build with Doppler
         working-directory: ./lpg-ui
         run: doppler run --project lpg --config prod -- npm run build
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
       
       # Enforce TypeScript strict mode as per your rules
       - name: TypeScript strict check
         working-directory: ./lpg-ui
         run: doppler run --project lpg --config dev -- npm run type-check
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
