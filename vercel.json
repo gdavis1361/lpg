@@ -1,3 +1,6 @@
 {
-  "rootDirectory": "lpg-ui"
-} 
+  "rootDirectory": "lpg-ui",
+  "buildCommand": "npm run vercel-build",
+  "framework": "nextjs",
+  "outputDirectory": ".next"
+}
