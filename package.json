@@ -1,0 +1,23 @@
+{
+  "name": "lpg-monorepo-root",
+  "private": true,
+  "workspaces": [
+    "lpg-ui",
+    "lpg-backend"
+  ],
+  "scripts": {
+    "dev:ui": "npm run dev --workspace=lpg-ui",
+    "dev:backend": "echo \"Backend development server needs to be started manually or via a dedicated script (e.g., if using Docker or a specific backend framework)\" && npm run supabase:start --workspace=lpg-backend",
+    "dev": "npm-run-all --parallel dev:ui dev:backend",
+    "build:ui": "npm run build --workspace=lpg-ui",
+    "lint:ui": "npm run lint --workspace=lpg-ui",
+    "lint:backend": "echo \"Linting for backend not yet configured\"",
+    "lint": "npm-run-all --parallel lint:ui lint:backend",
+    "types:supabase": "npm run types:supabase --workspace=lpg-ui",
+    "migrate:db": "npm run migrate --workspace=lpg-backend",
+    "install:all": "npm install --workspaces"
+  },
+  "devDependencies": {
+    "npm-run-all": "^4.1.5"
+  }
+}

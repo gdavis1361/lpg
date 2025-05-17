@@ -1,0 +1,12 @@
+{
+  "name": "lpg-backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "supabase:start": "supabase start",
+    "migrate": "supabase db push"
+  },
+  "devDependencies": {
+    "supabase": "^1"
+  }
+} 
