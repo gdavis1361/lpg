@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "npm run types:supabase && next dev --turbopack",
-    "build": "npm run types:supabase && next build",
+    "build": "npm run vercel-build",
+    "vercel-build": "next build",
     "start": "next start",
     "lint": "next lint",
     "validate-env": "node scripts/validate-env.js",
