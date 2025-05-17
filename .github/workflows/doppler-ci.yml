@@ -34,15 +34,14 @@ jobs:
       # Docs: https://github.com/marketplace/actions/doppler-cli
       - name: Install Doppler CLI
         uses: dopplerhq/cli-action@v2
-        with:
-          # This DOPPLER_TOKEN secret has been added to this repository's secrets
-          # You can verify its presence in the GitHub repository settings
-          token: ${{ secrets.DOPPLER_TOKEN }}
+      
+      - name: Configure Doppler Token
+        run: echo "${{ secrets.DOPPLER_TOKEN }}" | doppler configure set token --scope=/${{ github.repository }} --no-prompt
       
       # Verify no secrets in code, aligning with your CI/CD rules
       - name: Verify no secrets in code
         run: |
-          npm list -g detect-secrets || npm install -g detect-secrets
+          pip install detect-secrets
           detect-secrets scan
       
       # Run tests with Doppler environment variables
