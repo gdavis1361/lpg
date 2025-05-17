@@ -1,7 +1,3 @@
 {
-  "version": 2,
-  "buildCommand": "node prestart.js && SKIP_TYPECHECK=1 SKIP_ESLINT=1 NODE_OPTIONS='--require ./module-patch.js' NEXT_TELEMETRY_DISABLED=1 next build || (echo 'Build failed but we are deploying anyway' && mkdir -p .next && touch .next/index.html && exit 0)",
-  "installCommand": "npm install",
-  "outputDirectory": ".next",
   "framework": "nextjs"
 }
