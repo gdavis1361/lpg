@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd lpg-ui && node prestart.js && SKIP_TYPECHECK=1 SKIP_ESLINT=1 NODE_OPTIONS='--require ./module-patch.js' NEXT_TELEMETRY_DISABLED=1 next build --no-lint --no-type-check || (echo 'Build failed but we are deploying anyway' && mkdir -p .next && touch .next/index.html && exit 0)",
+  "buildCommand": "cd lpg-ui && npm run vercel-build",
   "framework": "nextjs",
   "outputDirectory": "lpg-ui/.next"
 }
