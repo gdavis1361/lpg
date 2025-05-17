@@ -32,8 +32,10 @@ git remote set-url origin https://github.com/gdavis1361/lpg.git
     ```bash
     npm run install:all
     # or
-    # npm install
+    # npm install --legacy-peer-deps
     ```
+
+> **Note:** This project requires the `--legacy-peer-deps` flag for npm installations due to specific dependency requirements. See [Dependency Management](./docs/DEPENDENCY_MANAGEMENT.md) for details.
 
 ### Environment Setup
 

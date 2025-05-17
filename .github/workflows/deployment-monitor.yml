@@ -25,8 +25,10 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'lpg-ui/package-lock.json'
       
+      # Using npm install with legacy-peer-deps instead of npm ci due to package-lock.json sync issues
+      # See docs/DEPENDENCY_MANAGEMENT.md for detailed explanation
       - name: Install dependencies
-        run: cd lpg-ui && npm ci
+        run: cd lpg-ui && npm install --legacy-peer-deps
       
       # Get Doppler secrets
       - name: Install Doppler CLI
