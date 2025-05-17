@@ -40,11 +40,11 @@ jobs:
       
       - name: Monitor deployment health
         run: |
-          cd lpg-ui && node scripts/deployment-monitor.js --check
+          cd lpg-ui && doppler run -- node scripts/deployment-monitor.js --check
       
       - name: Verify environment variables
         run: |
-          cd lpg-ui && node scripts/env-monitor.js --check-doppler
+          cd lpg-ui && doppler run -- node scripts/env-monitor.js --check-doppler
       
       # Add notification step for failures
       - name: Notify on failure
