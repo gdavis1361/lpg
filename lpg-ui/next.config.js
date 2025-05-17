@@ -4,8 +4,6 @@ const nextConfig = {
   swcMinify: true,
   // Explicitly set the output export format
   output: 'standalone',
-  // Ensure binary compatibility with Vercel's Linux environment
-  transpilePackages: ['@tailwindcss/postcss', 'lightningcss'],
   // Add React strict mode for better development experience
   reactStrictMode: true,
   // Disable image optimization which might depend on missing binaries
