@@ -39,6 +39,26 @@ FROM relationship_types rt
 WHERE r.relationship_type IS NOT NULL
   AND rt.code = r.relationship_type;
 
+-- Safeguard: Check for unmapped relationship_type values before making relationship_type_id NOT NULL
+DO $$
+DECLARE
+  unmapped_count INTEGER;
+  sample_unmapped_types TEXT;
+BEGIN
+  SELECT COUNT(*), array_to_string(array_agg(DISTINCT r.relationship_type), ', ')
+  INTO unmapped_count, sample_unmapped_types
+  FROM relationships r
+  LEFT JOIN relationship_types rt ON rt.code = r.relationship_type
+  WHERE r.relationship_type IS NOT NULL AND rt.id IS NULL;
+
+  RAISE NOTICE 'Found % unmapped relationship_type values. Sample unmapped types: %', unmapped_count, COALESCE(sample_unmapped_types, 'None');
+
+  IF unmapped_count > 0 THEN
+    RAISE EXCEPTION 'Aborting migration: % unmapped relationship_type values detected. Please seed these types in relationship_types or clean data. Sample problematic types: %', unmapped_count, COALESCE(sample_unmapped_types, 'None');
+  END IF;
+END;
+$$;
+
 -- 2.3 Make the new column NOT NULL (safe if table is empty or back-fill worked)
 ALTER TABLE relationships
   ALTER COLUMN relationship_type_id SET NOT NULL;
@@ -57,6 +77,32 @@ ALTER TABLE relationships
 -- Drop the original constraint (name may vary across dev DBs, so IF EXISTS)
 ALTER TABLE relationships
   DROP CONSTRAINT IF EXISTS unique_active_relationship;
+
+-- Safeguard: Check for duplicate active relationships based on (from_person_id, to_person_id, relationship_type_id)
+-- This check assumes relationship_type_id has been successfully populated by this stage.
+DO $$
+DECLARE
+  duplicate_group_count INTEGER;
+BEGIN
+  SELECT COUNT(*)
+  INTO duplicate_group_count
+  FROM (
+    SELECT 1
+    FROM relationships
+    WHERE status = 'active'
+      AND end_date IS NULL
+      AND relationship_type_id IS NOT NULL -- Should be NOT NULL if previous steps and safeguard passed
+    GROUP BY from_person_id, to_person_id, relationship_type_id
+    HAVING COUNT(*) > 1
+  ) AS duplicate_groups;
+
+  RAISE NOTICE 'Found % groups of (from_person_id, to_person_id, relationship_type_id) that would violate the new unique index for active relationships.', duplicate_group_count;
+
+  IF duplicate_group_count > 0 THEN
+    RAISE EXCEPTION 'Aborting migration: % groups of duplicate active relationships detected (based on from_person_id, to_person_id, relationship_type_id) that would violate the new unique index. Please clean/merge these duplicates or mark them as inactive/ended.', duplicate_group_count;
+  END IF;
+END;
+$$;
 
 -- Add partial unique index enforcing one active relationship per type
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_relationship
