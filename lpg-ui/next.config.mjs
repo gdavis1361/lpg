@@ -2,43 +2,57 @@
  * Production build configuration for Next.js
  * This file takes precedence over next.config.js when using import/export syntax
  */
-import fs from 'fs';
-import path from 'path';
 
 // Log that we're using the production config
-console.log('Using production Next.js config (next.config.mjs)');
+console.log('Using production Next.js config (next.config.mjs) - All checks disabled');
 
-// Import the development config from next.config.js using dynamic import
-const devConfigPath = path.join(process.cwd(), 'next.config.js');
-const getDevConfig = async () => {
-  // We need to use dynamic import for CommonJS modules
-  const devConfig = (await import(`file://${devConfigPath}`)).default;
-  return devConfig;
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  // Explicitly set the output export format
+  output: 'standalone',
+  
+  // Add React strict mode for better development experience
+  reactStrictMode: true,
+  
+  // Disable image optimization which might depend on missing binaries
+  images: {
+    unoptimized: true
+  },
+  
+  // Explicitly disable TypeScript type checking
+  typescript: {
+    // This completely disables TypeScript type checking
+    ignoreBuildErrors: true,
+  },
+  
+  // Explicitly disable ESLint
+  eslint: {
+    // This completely disables ESLint during the build
+    ignoreDuringBuilds: true,
+  },
+  
+  // Override webpack configuration to avoid native module issues
+  webpack: (config) => {
+    // Prevent webpack from trying to load the native binaries
+    config.resolve.alias['lightningcss-native'] = false;
+    
+    // Use the wasm version of Lightning CSS instead of the native one
+    if (config.resolve.fallback) {
+      config.resolve.fallback['lightningcss'] = require.resolve('lightningcss-wasm');
+    } else {
+      config.resolve.fallback = {
+        'lightningcss': require.resolve('lightningcss-wasm')
+      };
+    }
+    
+    return config;
+  },
+  
+  // Attempt to troubleshoot module loading issues
+  onDemandEntries: {
+    maxInactiveAge: 60 * 60 * 1000, // Extended for debugging
+    pagesBufferLength: 5,
+  },
 };
 
-// Create production config based on dev config but with type checking disabled
-const createConfig = async () => {
-  const devConfig = await getDevConfig();
-  
-  // Production config extends development config
-  const prodConfig = {
-    ...devConfig,
-    
-    // Explicitly disable TypeScript type checking
-    typescript: {
-      // This completely disables TypeScript type checking
-      ignoreBuildErrors: true,
-    },
-    
-    // Explicitly disable ESLint
-    eslint: {
-      // This completely disables ESLint during the build
-      ignoreDuringBuilds: true,
-    },
-  };
-  
-  return prodConfig;
-};
-
-// Export the async config function
-export default createConfig();
+export default nextConfig;
