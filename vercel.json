@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd lpg-ui && npm run vercel-build",
+  "buildCommand": "npm run vercel-build",
   "framework": "nextjs",
-  "outputDirectory": "lpg-ui/.next"
+  "outputDirectory": ".next"
 }
