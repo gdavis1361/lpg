@@ -48,7 +48,7 @@ jobs:
       # Run tests with Doppler environment variables
       - name: Run frontend tests
         working-directory: ./lpg-ui
-        run: doppler run --project lpg --config test -- npm run test
+        run: doppler run --project lpg --config dev -- npm run test
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
       
