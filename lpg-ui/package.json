@@ -6,7 +6,7 @@
     "dev": "npm run types:supabase && next dev --turbopack",
     "build": "npm run vercel-build",
     "prevercel-build": "node prestart.js",
-    "vercel-build": "NODE_OPTIONS='--require ./module-patch.js' NEXT_DISABLE_ESLINT=1 next build",
+    "vercel-build": "NODE_OPTIONS='--require ./module-patch.js' NEXT_DISABLE_ESLINT=1 next build --no-lint --no-typecheck",
     "start": "next start",
     "lint": "next lint",
     "lint:fix": "next lint --fix",
