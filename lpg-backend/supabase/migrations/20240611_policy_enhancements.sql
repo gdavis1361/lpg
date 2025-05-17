@@ -92,7 +92,7 @@ ON public.relationships FOR SELECT USING (auth.role() = 'authenticated');
 
 CREATE POLICY "Relationships - insert with ownership check" 
 ON public.relationships FOR INSERT WITH CHECK (
-  is_owner((SELECT auth_id FROM public.people WHERE id = NEW.from_person_id))
+  is_owner((SELECT auth_id FROM public.people WHERE id = from_person_id))
   OR has_permission('admin')
 );
 
@@ -115,7 +115,7 @@ ON public.interactions FOR SELECT USING (auth.role() = 'authenticated');
 
 CREATE POLICY "Interactions - insert with ownership check" 
 ON public.interactions FOR INSERT WITH CHECK (
-  is_owner((SELECT auth_id FROM public.people WHERE id = NEW.created_by))
+  is_owner((SELECT auth_id FROM public.people WHERE id = created_by))
   OR has_permission('admin')
 );
 
