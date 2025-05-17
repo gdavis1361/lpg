@@ -1,0 +1,52 @@
+name: Deployment Monitoring
+
+on:
+  # Run after deployment is complete
+  deployment_status:
+  # Run daily to check health
+  schedule:
+    - cron: '0 0 * * *'
+  # Allow manual triggering
+  workflow_dispatch:
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'deployment_status' && github.event.deployment_status.state == 'success')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'lpg-ui/package-lock.json'
+      
+      - name: Install dependencies
+        run: cd lpg-ui && npm ci
+      
+      # Get Doppler secrets
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v2
+      
+      - name: Setup Doppler
+        run: |
+          doppler setup --no-interactive --token=${{ secrets.DOPPLER_TOKEN }} --project=lpg-ui --config=prd
+      
+      - name: Monitor deployment health
+        run: |
+          cd lpg-ui && node scripts/deployment-monitor.js --check
+      
+      - name: Verify environment variables
+        run: |
+          cd lpg-ui && node scripts/env-monitor.js --check-doppler
+      
+      # Add notification step for failures
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "Deployment monitoring failed. Please check logs for details."
+          # Add your notification mechanism here (Slack, email, etc.)
