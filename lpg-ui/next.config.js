@@ -8,6 +8,22 @@ const nextConfig = {
   images: {
     unoptimized: true
   },
+  // Override webpack configuration to avoid native module issues
+  webpack: (config) => {
+    // Prevent webpack from trying to load the native binaries
+    config.resolve.alias['lightningcss-native'] = false;
+    
+    // Use the wasm version of Lightning CSS instead of the native one
+    if (config.resolve.fallback) {
+      config.resolve.fallback['lightningcss'] = require.resolve('lightningcss-wasm');
+    } else {
+      config.resolve.fallback = {
+        'lightningcss': require.resolve('lightningcss-wasm')
+      };
+    }
+    
+    return config;
+  },
 };
 
 module.exports = nextConfig;
