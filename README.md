@@ -8,6 +8,14 @@ This monorepo contains the frontend (`lpg-ui`) and backend (`lpg-backend`) for t
 - `lpg-backend/`: Supabase backend project (migrations, etc.).
 - `docs/`: Project documentation and design files.
 
+### Repository History
+
+This project was formerly a single frontend repository (`lpg-ui`) but has been restructured as a monorepo containing both frontend and backend components. If you're working with a local clone from the old repository URL, update your Git remote with:
+
+```bash
+git remote set-url origin https://github.com/gdavis1361/lpg.git
+```
+
 ## Getting Started
 
 ### Prerequisites
