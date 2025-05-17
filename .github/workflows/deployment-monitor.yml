@@ -36,15 +36,15 @@ jobs:
       
       - name: Setup Doppler
         run: |
-          doppler setup --no-interactive --token=${{ secrets.DOPPLER_TOKEN }} --project=lpg-ui --config=prd
+          doppler setup --no-interactive --token=${{ secrets.DOPPLER_TOKEN }} --project=lpg --config=prd
       
       - name: Monitor deployment health
         run: |
-          cd lpg-ui && doppler run -- node scripts/deployment-monitor.js --check
+          cd lpg-ui && doppler run --project lpg --config prd -- node scripts/deployment-monitor.js --check
       
       - name: Verify environment variables
         run: |
-          cd lpg-ui && doppler run -- node scripts/env-monitor.js --check-doppler
+          cd lpg-ui && doppler run --project lpg --config prd -- node scripts/env-monitor.js --check-doppler
       
       # Add notification step for failures
       - name: Notify on failure
