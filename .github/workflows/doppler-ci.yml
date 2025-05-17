@@ -59,7 +59,7 @@ jobs:
       # Build with Doppler environment variables
       - name: Build with Doppler
         working-directory: ./lpg-ui
-        run: doppler run --project lpg --config prod -- npm run build
+        run: doppler run --project lpg --config dev -- npm run build
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
       
