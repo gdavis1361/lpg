@@ -155,6 +155,22 @@ Database schema changes are managed via migration files in `lpg-backend/supabase
 
 ## Deployment and CI/CD
 
+### Deployment Configuration
+
+This project is configured for deployment with Vercel and uses a monorepo structure:
+
+1. **Vercel Configuration**: The project uses a root-level `vercel.json` that specifies:
+   ```json
+   {
+     "buildCommand": "npm run vercel-build",
+     "framework": "nextjs",
+     "outputDirectory": ".next"
+   }
+   ```
+   This configuration is designed to work with Vercel's automatic directory positioning for monorepos.
+
+2. **Package Installation**: The project uses `--legacy-peer-deps` flag for npm installations to handle peer dependency resolution issues with modern packages.
+
 ### Doppler Integration with CI/CD
 
 The project uses Doppler for secure environment variable management in CI/CD pipelines:
