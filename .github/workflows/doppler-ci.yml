@@ -36,7 +36,7 @@ jobs:
         uses: dopplerhq/cli-action@v2
       
       - name: Configure Doppler Token
-        run: echo "${{ secrets.DOPPLER_TOKEN }}" | doppler configure set token --scope=/${{ github.repository }} --no-prompt
+        run: doppler configure set token ${{ secrets.DOPPLER_TOKEN }} --scope=/${{ github.repository }}
       
       # Verify no secrets in code, aligning with your CI/CD rules
       - name: Verify no secrets in code
