@@ -47,6 +47,11 @@ yarn-error.log*
 **/supabase/.branches
 **/supabase/.temp
 
+# Doppler
+.doppler-sponsored
+.doppler.yaml
+.doppler/.secrets.*
+
 # OS specific
 .DS_Store
 Thumbs.db

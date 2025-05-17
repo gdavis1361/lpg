@@ -1,0 +1,53 @@
+name: Build with Doppler Environment Variables
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x]
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm run install:all
+      
+      # This step requires adding the DOPPLER_TOKEN secret in GitHub repository settings
+      # See: https://docs.doppler.com/docs/github-actions
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v2
+        with:
+          # GitHub secret named DOPPLER_TOKEN must be added to repository settings
+          token: ${{ secrets.DOPPLER_TOKEN }}
+      
+      # Verify no secrets in code, aligning with your CI/CD rules
+      - name: Verify no secrets in code
+        run: |
+          npm list -g detect-secrets || npm install -g detect-secrets
+          detect-secrets scan
+      
+      # Run tests with Doppler environment variables
+      - name: Run frontend tests
+        run: doppler run --project lpg --config test --secrets-group frontend -- npm run test --workspace=lpg-ui
+      
+      # Build with Doppler environment variables
+      - name: Build with Doppler
+        run: doppler run --project lpg --config prod --secrets-group frontend -- npm run build:ui
+      
+      # Enforce TypeScript strict mode as per your rules
+      - name: TypeScript strict check
+        run: doppler run --project lpg --config dev --secrets-group frontend -- npm run type-check --workspace=lpg-ui

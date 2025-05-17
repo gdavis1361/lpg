@@ -29,13 +29,49 @@ This monorepo contains the frontend (`lpg-ui`) and backend (`lpg-backend`) for t
 
 ### Environment Setup
 
-1.  **Frontend (`lpg-ui`):**
-    *   Copy `.env.example` to `.env.local` in the `lpg-ui` directory: `cp lpg-ui/.env.example lpg-ui/.env.local`
-    *   Fill in the required environment variables in `lpg-ui/.env.local` (Supabase URL, Anon Key, etc.).
+#### Option A: Using Doppler (Recommended)
 
-2.  **Backend (`lpg-backend`):**
-    *   Copy `.env.example` to `.env` or `.env.local` (as per your Supabase CLI setup) in the `lpg-backend` directory: `cp lpg-backend/.env.example lpg-backend/.env`
-    *   Fill in the required environment variables, especially for Supabase CLI and database connections.
+We use Doppler for secure environment variable management across environments:
+
+1. **Initial Setup:**
+   ```bash
+   # Login to Doppler
+   npm run doppler:login
+   
+   # Configure your local setup
+   npm run doppler:configure
+   ```
+
+2. **Running with Doppler:**
+   All npm scripts are configured to use Doppler automatically. Simply use them as usual:
+   ```bash
+   npm run dev        # Uses dev environment variables
+   npm run build:ui   # Uses production environment variables
+   ```
+
+3. **Required Variables in Doppler:**
+   * **Frontend (`frontend` secrets group):**
+     - `NEXT_PUBLIC_SUPABASE_URL`
+     - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   
+   * **Backend (`backend` secrets group):**
+     - `SUPABASE_URL`
+     - `SUPABASE_SERVICE_ROLE_KEY`
+     - `SUPABASE_JWT_SECRET`
+     - `POSTGRES_URL` and other DB connection variables
+     - `LOG_LEVEL` and `LOG_FORMAT` for logging configuration
+
+#### Option B: Manual Environment Files
+
+If you prefer not to use Doppler, you can still use traditional environment files:
+
+1. **Frontend (`lpg-ui`):**
+   * Copy `.env.example` to `.env.local` in the `lpg-ui` directory: `cp lpg-ui/.env.example lpg-ui/.env.local`
+   * Fill in the required environment variables in `lpg-ui/.env.local` (Supabase URL, Anon Key, etc.).
+
+2. **Backend (`lpg-backend`):**
+   * Copy `.env.example` to `.env` in the `lpg-backend` directory: `cp lpg-backend/.env.example lpg-backend/.env`
+   * Fill in the required environment variables, especially for Supabase CLI and database connections.
 
 ### Running the Development Environment
 
@@ -106,6 +142,40 @@ Database schema changes are managed via migration files in `lpg-backend/supabase
   # or from lpg-ui directory
   # npm run test
   ```
+
+## Deployment and CI/CD
+
+### Doppler Integration with CI/CD
+
+The project uses Doppler for secure environment variable management in CI/CD pipelines:
+
+1. **GitHub Actions:**
+   * A GitHub Actions workflow is configured in `.github/workflows/doppler-ci.yml`
+   * It uses the Doppler CLI action to securely inject environment variables during the build
+   * You'll need to add a `DOPPLER_TOKEN` secret to your GitHub repository settings
+
+2. **Vercel Deployment:**
+   * The frontend is configured for deployment on Vercel
+   * To use Doppler with Vercel:
+     1. Install the Doppler Vercel integration: https://vercel.com/integrations/doppler
+     2. Connect your Vercel project to Doppler
+     3. Configure Doppler to sync environment variables to Vercel automatically
+
+3. **Security Considerations:**
+   * The CI/CD pipeline includes a check to verify no secrets are committed to the codebase
+   * TypeScript strict mode is enforced during the build process
+   * Logs are configured to mask sensitive information in accordance with our logging standards
+
+### Database Migrations in CI/CD
+
+For CI/CD database migrations:
+
+1. Development branches use test databases to validate migrations
+2. Production deployments should run migrations before deploying the application
+3. Migrations are applied using Doppler for environment variable injection:
+   ```bash
+   doppler run --project lpg --config prod --secrets-group backend -- npm run migrate:db
+   ```
 
 ## Contributing
 

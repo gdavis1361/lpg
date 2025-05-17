@@ -1,0 +1,5 @@
+{
+  "buildCommand": "cd .. && npm run build:ui",
+  "framework": "nextjs",
+  "outputDirectory": "lpg-ui/.next"
+}

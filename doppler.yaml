@@ -1,0 +1,3 @@
+setup:
+  project: lpg
+  # Root level shared configuration
