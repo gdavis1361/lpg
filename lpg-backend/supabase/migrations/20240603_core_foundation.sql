@@ -149,6 +149,28 @@ CREATE TABLE interaction_tags (
   UNIQUE (interaction_id, tag_id)
 );
 
+-- 3.8 Organizations -----------------------------------------------------------
+CREATE TABLE organizations (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name        TEXT NOT NULL UNIQUE,
+  type        TEXT,                         -- e.g., 'school', 'employer'
+  description TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 3.9 Affiliations ------------------------------------------------------------
+CREATE TABLE affiliations (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  person_id       UUID NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  role            TEXT,      -- e.g., 'student', 'alumni', 'staff'
+  start_date      DATE,
+  end_date        DATE,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (person_id, organization_id, role)
+);
+
 -- 4. Triggers ------------------------------------------------------------------
 CREATE TRIGGER set_people_updated_at
   BEFORE UPDATE ON people
@@ -192,6 +214,8 @@ ALTER TABLE interaction_participants   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tags                       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE people_tags                ENABLE ROW LEVEL SECURITY;
 ALTER TABLE interaction_tags           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE organizations              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE affiliations               ENABLE ROW LEVEL SECURITY;
 
 -- Baseline SELECT policies (liberal for MVP – will tighten later).
 CREATE POLICY "People view – authenticated" ON people
@@ -216,6 +240,12 @@ CREATE POLICY "People-tags view – authenticated" ON people_tags
   FOR SELECT USING (auth.role() = 'authenticated');
 
 CREATE POLICY "Interaction-tags view – authenticated" ON interaction_tags
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Organizations view – authenticated" ON organizations
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Affiliations view – authenticated" ON affiliations
   FOR SELECT USING (auth.role() = 'authenticated');
 
 -- 7. Seed data -----------------------------------------------------------------
