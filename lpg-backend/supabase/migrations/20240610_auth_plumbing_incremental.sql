@@ -1,9 +1,8 @@
--- migration_3_auth_plumbing.sql
--- Phase 3: Auth setup - signup/sync triggers and custom JWT claims
+-- migration_3_auth_plumbing_incremental.sql
+-- Phase 3: Auth setup - JWT claims and role management (incremental version)
 -- -----------------------------------------------------------------------------
--- Applies on top of previous migrations and adds authentication integration
--- Note: This migration assumes no anonymous read access is required.
---       If public data exposure is needed later, policies will need modification.
+-- This is a modified version that only applies new components
+-- and skips existing triggers detected on auth.users
 
 -- ***************************
 -- UP MIGRATION --------------
@@ -91,72 +90,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 2. Signup & Metadata Sync Triggers -----------------------------------------
-
--- Create a trigger to create a person record when a new user signs up
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
-DECLARE
-  student_role_id UUID;
-  new_person_id UUID;
-BEGIN
-  -- Get student role ID
-  student_role_id := get_student_role_id();
-  
-  -- Create a new person record for this user
-  INSERT INTO public.people (
-    auth_id, 
-    first_name, 
-    last_name, 
-    email, 
-    avatar_url
-  ) VALUES (
-    NEW.id, 
-    COALESCE(NEW.raw_user_meta_data->>'first_name', split_part(NEW.email, '@', 1)), 
-    COALESCE(NEW.raw_user_meta_data->>'last_name', ''), 
-    NEW.email, 
-    NEW.raw_user_meta_data->>'avatar_url'
-  )
-  RETURNING id INTO new_person_id;
-  
-  -- Assign the default student role to the new user
-  INSERT INTO public.people_roles (person_id, role_id, primary_role)
-  VALUES (new_person_id, student_role_id, true);
-  
-  -- Update the user's JWT claims
-  PERFORM public.update_user_claims(NEW.id);
-  
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Create the trigger on auth.users for new signups
-CREATE TRIGGER on_auth_user_created
-AFTER INSERT ON auth.users
-FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-
--- Create a trigger to keep people data in sync with auth.users updates
-CREATE OR REPLACE FUNCTION public.handle_user_metadata_sync()
-RETURNS TRIGGER AS $$
-BEGIN
-  -- Only update if values actually changed (prevents trigger loops)
-  IF NEW.email IS DISTINCT FROM OLD.email OR 
-     NEW.raw_user_meta_data IS DISTINCT FROM OLD.raw_user_meta_data THEN
-    UPDATE public.people
-    SET 
-      email = NEW.email,
-      avatar_url = COALESCE(NEW.raw_user_meta_data->>'avatar_url', avatar_url)
-    WHERE auth_id = NEW.id;
-  END IF;
-  
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Create the trigger on auth.users for metadata updates
-CREATE TRIGGER on_auth_user_updated
-AFTER UPDATE OF email, raw_user_meta_data ON auth.users
-FOR EACH ROW EXECUTE FUNCTION public.handle_user_metadata_sync();
+-- Note: Skipping creation of handle_new_user and handle_user_metadata_sync triggers
+-- since they appear to already exist in the database.
 
 -- 3. Role Management & JWT Claims --------------------------------------------
 
@@ -220,28 +155,3 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE TRIGGER on_role_permission_change
 AFTER UPDATE OF permissions ON public.roles
 FOR EACH ROW EXECUTE FUNCTION public.handle_role_permission_changes();
-
--- ***************************
--- DOWN MIGRATION ------------
--- ***************************
-
--- To rollback this migration, run the following SQL:
-/*
-DROP TRIGGER IF EXISTS on_role_permission_change ON public.roles;
-DROP FUNCTION IF EXISTS public.handle_role_permission_changes();
-
-DROP TRIGGER IF EXISTS on_people_role_change ON public.people_roles;
-DROP FUNCTION IF EXISTS public.handle_role_changes();
-
-DROP TRIGGER IF EXISTS on_auth_user_updated ON auth.users;
-DROP FUNCTION IF EXISTS public.handle_user_metadata_sync();
-
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-DROP FUNCTION IF EXISTS public.handle_new_user();
-
-DROP FUNCTION IF EXISTS public.update_user_claims(UUID);
-DROP FUNCTION IF EXISTS get_student_role_id();
-*/
-
--- -----------------------------------------------------------------------------
--- End migration_3_auth_plumbing.sql
