@@ -17,32 +17,34 @@ jobs:
   create-branch-environment:
     runs-on: ubuntu-latest
     
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
       
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '18'
-          # Don't use cache until package-lock.json is generated
           cache: 'npm'
-          cache-dependency-path: 'lpg-backend/package.json'
+          cache-dependency-path: '**/package-lock.json'
       
-      # Using npm install with legacy-peer-deps following project standard
-      - name: Install dependencies
+      - name: Install backend dependencies
+        working-directory: lpg-backend
         run: |
-          cd lpg-backend
-          npm install --legacy-peer-deps
-          
-          # Install Supabase CLI
-          npm install -g supabase@latest
-          
-          # Verify installations
-          echo "Node version: $(node --version)"
-          echo "NPM version: $(npm --version)"
-          echo "Supabase CLI version: $(supabase --version)"
+          npm ci --legacy-peer-deps
+          echo "Node $(node -v)"
+          echo "NPM $(npm -v)"
 
+      # Install Supabase CLI using official action
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.22.6
+          
+      - name: Verify Supabase CLI
+        run: |
+          echo "Supabase CLI $(supabase --version)"
+            
       # Install and configure Doppler CLI for secure environment variable access
       - name: Install Doppler CLI
         uses: dopplerhq/cli-action@v2
@@ -51,48 +53,44 @@ jobs:
         run: |
           doppler setup --no-interactive --token=${{ secrets.DOPPLER_TOKEN }} --project=lpg --config=dev
       
-      # Extract branch name from the PR
+      # This step is no longer needed since we use PR number directly
+      # But keeping a simplified version for backwards compatibility
       - name: Extract branch name
         id: extract_branch
         run: |
-          BRANCH_NAME=${GITHUB_HEAD_REF##*/}
-          VALID_BRANCH_NAME=$(echo $BRANCH_NAME | sed 's/[^a-zA-Z0-9_-]/-/g')
-          echo "branch_name=$VALID_BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "branch_name=pr-${{ github.event.number }}" >> $GITHUB_OUTPUT
       
       # Create or update Supabase branch environment
       - name: Create/Update Supabase branch environment
         id: supabase_branch
-        working-directory: ./lpg-backend
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        working-directory: lpg-backend
         run: |
-          
           # Get Supabase project ID from Doppler
           PROJECT_ID=$(doppler run --project lpg --config dev -- echo $SUPABASE_PROJECT_ID)
           echo "project_id=$PROJECT_ID" >> $GITHUB_OUTPUT
           
+          # Create a PR-specific branch name with prefix for clarity
+          BRANCH_NAME="pr-${{ github.event.number }}"
+          echo "PR-specific branch name: $BRANCH_NAME"
+          
           # Check if branch already exists
-          BRANCH_NAME="${{ steps.extract_branch.outputs.branch_name }}"
-          BRANCH_EXISTS=$(supabase branches list --project-ref=$PROJECT_ID --access-token=$SUPABASE_ACCESS_TOKEN --json | jq --arg branch "$BRANCH_NAME" '.[] | select(.name==$branch) | .id' -r || echo "")
+          BRANCH_EXISTS=$(supabase branches list --project-ref=$PROJECT_ID --json | jq --arg branch "$BRANCH_NAME" '.[] | select(.name==$branch) | .id' -r || echo "")
           
           if [ -z "$BRANCH_EXISTS" ]; then
-            echo "Creating new Supabase branch: ${{ steps.extract_branch.outputs.branch_name }}"
-            BRANCH_ID=$(supabase branches create ${{ steps.extract_branch.outputs.branch_name }} --project-ref=$PROJECT_ID --access-token=$SUPABASE_ACCESS_TOKEN --json | jq '.id' -r)
+            echo "Creating new Supabase branch: $BRANCH_NAME"
+            BRANCH_ID=$(supabase branches create "$BRANCH_NAME" --project-ref=$PROJECT_ID --json | jq '.id' -r)
             echo "branch_id=$BRANCH_ID" >> $GITHUB_OUTPUT
             echo "created=true" >> $GITHUB_OUTPUT
           else
-            echo "Using existing Supabase branch: ${{ steps.extract_branch.outputs.branch_name }}"
+            echo "Using existing Supabase branch: $BRANCH_NAME"
             echo "branch_id=$BRANCH_EXISTS" >> $GITHUB_OUTPUT
             echo "created=false" >> $GITHUB_OUTPUT
           fi
       
       # Apply migrations to branch environment
       - name: Apply migrations to branch
-        working-directory: ./lpg-backend
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        working-directory: lpg-backend
         run: |
-          
           # Get current branch ID
           BRANCH_ID=${{ steps.supabase_branch.outputs.branch_id }}
           
@@ -100,14 +98,12 @@ jobs:
           PROJECT_ID=${{ steps.supabase_branch.outputs.project_id }}
           
           # Apply migrations to the branch
-          echo "Applying migrations to branch: ${{ steps.extract_branch.outputs.branch_name }}"
-          supabase db push --branch=$BRANCH_ID --project-ref=$PROJECT_ID --access-token=$SUPABASE_ACCESS_TOKEN
+          echo "Applying migrations to branch: pr-${{ github.event.number }}"
+          supabase db push --branch=$BRANCH_ID --project-ref=$PROJECT_ID
       
       # Run migration validation
       - name: Validate migrations
-        working-directory: ./lpg-backend
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        working-directory: lpg-backend
         run: |
           # Run validation script using Doppler for env vars
           doppler run --project lpg --config dev -- node scripts/validate-migrations.js --branch=${{ steps.supabase_branch.outputs.branch_id }} || echo "Validation script not fully implemented yet"
@@ -119,7 +115,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const branchName = '${{ steps.extract_branch.outputs.branch_name }}';
+            const branchName = 'pr-${{ github.event.number }}';
             const branchId = '${{ steps.supabase_branch.outputs.branch_id }}';
             const projectId = '${{ steps.supabase_branch.outputs.project_id }}';
             const wasCreated = '${{ steps.supabase_branch.outputs.created }}' === 'true';
