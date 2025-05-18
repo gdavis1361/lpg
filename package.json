@@ -9,7 +9,7 @@
     "dev:ui": "cd lpg-ui && $(which doppler) run --project lpg --config dev -- npm run dev",
     "dev:backend": "cd lpg-backend && $(which doppler) run --project lpg --config dev -- npm run supabase:start",
     "dev": "npm-run-all --parallel dev:ui dev:backend",
-    "build:ui": "cd lpg-ui && $(which doppler) run --project lpg --config prod -- npm run build",
+    "build:ui": "cd lpg-ui && $(which doppler) run --project lpg --config prd -- npm run build",
     "build:ui:dev": "cd lpg-ui && $(which doppler) run --project lpg --config dev -- npm run build",
     "lint:ui": "npm run lint --workspace=lpg-ui",
     "lint:backend": "echo \"Linting for backend not yet configured\"",
@@ -26,7 +26,6 @@
     "vercel-build": "npm run build:ui"
   },
   "devDependencies": {
-    "doppler-cli": "^2.0.66",
     "npm-run-all": "^4.1.5"
   }
 }

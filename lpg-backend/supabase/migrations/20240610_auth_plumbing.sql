@@ -194,44 +194,22 @@ FOR EACH ROW EXECUTE FUNCTION public.handle_role_changes();
 -- Trigger for when role permissions change
 CREATE OR REPLACE FUNCTION public.handle_role_permission_changes()
 RETURNS TRIGGER AS $$
+DECLARE
+  affected_auth_id UUID;
 BEGIN
   -- Only process if permissions actually changed
   IF NEW.permissions IS DISTINCT FROM OLD.permissions THEN
-    -- Set-based update for all affected users
-    UPDATE auth.users u
-    SET raw_app_meta_data = 
-      COALESCE(u.raw_app_meta_data, '{}'::jsonb) || 
-      (
-        WITH user_permissions AS (
-          SELECT 
-            p.auth_id,
-            jsonb_agg(pr.role_id) as role_ids,
-            jsonb_build_object(
-              'admin', bool_or((r.permissions->>'all')::boolean),
-              'is_student', bool_or(r.name = 'student'),
-              'is_mentor', bool_or(r.name = 'mentor'),
-              'is_donor', bool_or(r.name = 'donor'),
-              'is_alumni', bool_or(r.name = 'alumni'),
-              'is_staff', bool_or(r.name = 'staff')
-            ) as permissions
-          FROM public.people_roles pr
-          JOIN public.roles r ON pr.role_id = r.id
-          JOIN public.people p ON pr.person_id = p.id
-          WHERE pr.role_id = NEW.id
-          AND p.auth_id IS NOT NULL
-          GROUP BY p.auth_id
-        )
-        SELECT 
-          jsonb_build_object(
-            'role_ids', COALESCE(up.role_ids, '[]'::jsonb),
-            'permissions', COALESCE(up.permissions, '{}'::jsonb)
-          )
-        FROM user_permissions up
-        WHERE up.auth_id = u.id
-      )
-    FROM public.people p
-    JOIN public.people_roles pr ON pr.person_id = p.id
-    WHERE pr.role_id = NEW.id AND p.auth_id = u.id;
+    -- Loop through all users affected by this role's permission change
+    -- and call update_user_claims for each.
+    -- This ensures their entire claim set is rebuilt correctly.
+    FOR affected_auth_id IN
+      SELECT p.auth_id
+      FROM public.people p
+      JOIN public.people_roles pr ON pr.person_id = p.id
+      WHERE pr.role_id = NEW.id AND p.auth_id IS NOT NULL
+    LOOP
+      PERFORM public.update_user_claims(affected_auth_id);
+    END LOOP;
   END IF;
   
   RETURN NEW;
