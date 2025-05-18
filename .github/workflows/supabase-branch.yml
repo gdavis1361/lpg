@@ -74,11 +74,11 @@ jobs:
           echo "PR-specific branch name: $BRANCH_NAME"
           
           # Check if branch already exists
-          BRANCH_EXISTS=$(supabase branches list --project-ref=$PROJECT_ID --json | jq --arg branch "$BRANCH_NAME" '.[] | select(.name==$branch) | .id' -r || echo "")
+          BRANCH_EXISTS=$(supabase branches list --project-ref=$PROJECT_ID --output=json | jq --arg branch "$BRANCH_NAME" '.[] | select(.name==$branch) | .id' -r || echo "")
           
           if [ -z "$BRANCH_EXISTS" ]; then
             echo "Creating new Supabase branch: $BRANCH_NAME"
-            BRANCH_ID=$(supabase branches create "$BRANCH_NAME" --project-ref=$PROJECT_ID --json | jq '.id' -r)
+            BRANCH_ID=$(supabase branches create "$BRANCH_NAME" --project-ref=$PROJECT_ID --output=json | jq '.id' -r)
             echo "branch_id=$BRANCH_ID" >> $GITHUB_OUTPUT
             echo "created=true" >> $GITHUB_OUTPUT
           else
@@ -99,7 +99,7 @@ jobs:
           
           # Apply migrations to the branch
           echo "Applying migrations to branch: pr-${{ github.event.number }}"
-          supabase db push --branch=$BRANCH_ID --project-ref=$PROJECT_ID
+          supabase db push --ref=$BRANCH_ID --project-ref=$PROJECT_ID
       
       # Run migration validation
       - name: Validate migrations
