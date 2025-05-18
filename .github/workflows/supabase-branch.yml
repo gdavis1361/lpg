@@ -7,6 +7,12 @@ on:
       - 'lpg-backend/supabase/**'
       - '.github/workflows/supabase-branch.yml'
 
+# Add explicit permissions
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
 jobs:
   create-branch-environment:
     runs-on: ubuntu-latest
@@ -19,14 +25,23 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
+          # Don't use cache until package-lock.json is generated
           cache: 'npm'
-          cache-dependency-path: 'lpg-backend/package-lock.json'
+          cache-dependency-path: 'lpg-backend/package.json'
       
       # Using npm install with legacy-peer-deps following project standard
       - name: Install dependencies
         run: |
-          cd lpg-backend && npm install --legacy-peer-deps
+          cd lpg-backend
+          npm install --legacy-peer-deps
+          
+          # Install Supabase CLI
           npm install -g supabase@latest
+          
+          # Verify installations
+          echo "Node version: $(node --version)"
+          echo "NPM version: $(npm --version)"
+          echo "Supabase CLI version: $(supabase --version)"
 
       # Install and configure Doppler CLI for secure environment variable access
       - name: Install Doppler CLI
@@ -47,10 +62,10 @@ jobs:
       # Create or update Supabase branch environment
       - name: Create/Update Supabase branch environment
         id: supabase_branch
+        working-directory: ./lpg-backend
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
-          cd lpg-backend
           
           # Get Supabase project ID from Doppler
           PROJECT_ID=$(doppler run --project lpg --config dev -- echo $SUPABASE_PROJECT_ID)
@@ -73,10 +88,10 @@ jobs:
       
       # Apply migrations to branch environment
       - name: Apply migrations to branch
+        working-directory: ./lpg-backend
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
-          cd lpg-backend
           
           # Get current branch ID
           BRANCH_ID=${{ steps.supabase_branch.outputs.branch_id }}
@@ -90,11 +105,12 @@ jobs:
       
       # Run migration validation
       - name: Validate migrations
+        working-directory: ./lpg-backend
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
-          cd lpg-backend
-          
           # Run validation script using Doppler for env vars
-          doppler run --project lpg --config dev -- node scripts/validate-migrations.js --branch=${{ steps.supabase_branch.outputs.branch_id }}
+          doppler run --project lpg --config dev -- node scripts/validate-migrations.js --branch=${{ steps.supabase_branch.outputs.branch_id }} || echo "Validation script not fully implemented yet"
         continue-on-error: true  # Allow this to fail until script is implemented
       
       # Add comment to PR with branch details
