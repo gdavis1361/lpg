@@ -4,9 +4,11 @@
   "type": "module",
   "scripts": {
     "supabase:start": "supabase start",
-    "migrate": "supabase db push"
+    "migrate": "supabase db push",
+    "validate": "node scripts/validate-migrations.js"
   },
   "devDependencies": {
+    "@supabase/supabase-js": "^2.49.4",
     "supabase": "^1"
   }
-} 
+}

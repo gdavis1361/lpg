@@ -1,0 +1,160 @@
+name: Supabase Branch Environment
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'lpg-backend/supabase/**'
+      - '.github/workflows/supabase-branch.yml'
+
+jobs:
+  create-branch-environment:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'lpg-backend/package-lock.json'
+      
+      # Using npm install with legacy-peer-deps following project standard
+      - name: Install dependencies
+        run: |
+          cd lpg-backend && npm install --legacy-peer-deps
+          npm install -g supabase@latest
+
+      # Install and configure Doppler CLI for secure environment variable access
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v2
+      
+      - name: Setup Doppler
+        run: |
+          doppler setup --no-interactive --token=${{ secrets.DOPPLER_TOKEN }} --project=lpg --config=dev
+      
+      # Extract branch name from the PR
+      - name: Extract branch name
+        id: extract_branch
+        run: |
+          BRANCH_NAME=${GITHUB_HEAD_REF##*/}
+          VALID_BRANCH_NAME=$(echo $BRANCH_NAME | sed 's/[^a-zA-Z0-9_-]/-/g')
+          echo "branch_name=$VALID_BRANCH_NAME" >> $GITHUB_OUTPUT
+      
+      # Create or update Supabase branch environment
+      - name: Create/Update Supabase branch environment
+        id: supabase_branch
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          cd lpg-backend
+          
+          # Get Supabase project ID from Doppler
+          PROJECT_ID=$(doppler run --project lpg --config dev -- echo $SUPABASE_PROJECT_ID)
+          echo "project_id=$PROJECT_ID" >> $GITHUB_OUTPUT
+          
+          # Check if branch already exists
+          BRANCH_NAME="${{ steps.extract_branch.outputs.branch_name }}"
+          BRANCH_EXISTS=$(supabase branches list --project-ref=$PROJECT_ID --access-token=$SUPABASE_ACCESS_TOKEN --json | jq --arg branch "$BRANCH_NAME" '.[] | select(.name==$branch) | .id' -r || echo "")
+          
+          if [ -z "$BRANCH_EXISTS" ]; then
+            echo "Creating new Supabase branch: ${{ steps.extract_branch.outputs.branch_name }}"
+            BRANCH_ID=$(supabase branches create ${{ steps.extract_branch.outputs.branch_name }} --project-ref=$PROJECT_ID --access-token=$SUPABASE_ACCESS_TOKEN --json | jq '.id' -r)
+            echo "branch_id=$BRANCH_ID" >> $GITHUB_OUTPUT
+            echo "created=true" >> $GITHUB_OUTPUT
+          else
+            echo "Using existing Supabase branch: ${{ steps.extract_branch.outputs.branch_name }}"
+            echo "branch_id=$BRANCH_EXISTS" >> $GITHUB_OUTPUT
+            echo "created=false" >> $GITHUB_OUTPUT
+          fi
+      
+      # Apply migrations to branch environment
+      - name: Apply migrations to branch
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          cd lpg-backend
+          
+          # Get current branch ID
+          BRANCH_ID=${{ steps.supabase_branch.outputs.branch_id }}
+          
+          # Get Supabase project ID 
+          PROJECT_ID=${{ steps.supabase_branch.outputs.project_id }}
+          
+          # Apply migrations to the branch
+          echo "Applying migrations to branch: ${{ steps.extract_branch.outputs.branch_name }}"
+          supabase db push --branch=$BRANCH_ID --project-ref=$PROJECT_ID --access-token=$SUPABASE_ACCESS_TOKEN
+      
+      # Run migration validation
+      - name: Validate migrations
+        run: |
+          cd lpg-backend
+          
+          # Run validation script using Doppler for env vars
+          doppler run --project lpg --config dev -- node scripts/validate-migrations.js --branch=${{ steps.supabase_branch.outputs.branch_id }}
+        continue-on-error: true  # Allow this to fail until script is implemented
+      
+      # Add comment to PR with branch details
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const branchName = '${{ steps.extract_branch.outputs.branch_name }}';
+            const branchId = '${{ steps.supabase_branch.outputs.branch_id }}';
+            const projectId = '${{ steps.supabase_branch.outputs.project_id }}';
+            const wasCreated = '${{ steps.supabase_branch.outputs.created }}' === 'true';
+            
+            const comment = `## Supabase Branch Environment
+            
+            ${wasCreated ? '🆕 Created new' : '🔄 Using existing'} Supabase branch environment: **${branchName}**
+            
+            ### Branch Details
+            - **Branch ID:** \`${branchId}\`
+            - **Status:** Migration${wasCreated ? 's applied' : ' update attempted'}
+            
+            To connect to this branch environment locally:
+            \`\`\`bash
+            cd lpg-backend
+            supabase link --project-ref=${projectId} --branch=${branchId}
+            \`\`\`
+            
+            To run migrations against this branch:
+            \`\`\`bash
+            cd lpg-backend
+            supabase db push --branch=${branchId}
+            \`\`\`
+            
+            ℹ️ You can view this branch in the Supabase Dashboard under **Project Settings → Branch Environments**
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      # Notify on failure
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const comment = `## ❌ Supabase Branch Environment Setup Failed
+            
+            The workflow to create or update a Supabase branch environment for this PR failed.
+            
+            Please check the [workflow logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });

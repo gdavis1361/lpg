@@ -11,6 +11,7 @@ This document outlines the database seeding approach for the Chattanooga Prep Re
 | `seed.sql` | Environment-aware entry point | Detects environment and runs appropriate seed file |
 | `seed-dev.sql` | Development environment | Contains reference data + sample data for development |
 | `seed-prod.sql` | Production environment | Contains only essential reference data, no sample data |
+| `seed-test.sql` | Testing | Contains minimal test data for workflow validation |
 
 ## Reference Data
 
