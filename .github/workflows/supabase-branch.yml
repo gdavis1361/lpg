@@ -75,7 +75,7 @@ jobs:
           
           # First link the project (required before branch operations)
           echo "Linking to Supabase project $PROJECT_ID"
-          supabase link --project-id $PROJECT_ID
+          supabase link --project-ref $PROJECT_ID
           
           # Create a PR-specific branch name with prefix for clarity
           BRANCH_NAME="pr-${{ github.event.number }}"
@@ -139,7 +139,7 @@ jobs:
             To connect to this branch environment locally:
             \`\`\`bash
             cd lpg-backend
-            supabase link --project-id=${projectId} --branch=${branchId}
+            supabase link --project-ref=${projectId} --branch=${branchId}
             \`\`\`
             
             To run migrations against this branch:
