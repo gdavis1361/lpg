@@ -87,45 +87,106 @@ jobs:
         id: supabase_branch
         working-directory: lpg-backend
         run: |
-          # Get Supabase project ID from Doppler
-          # First capture direct printenv output to verify variable exists
-          echo "Direct access to SUPABASE_PROJECT_ID:" 
-          doppler run --project lpg --config dev -- printenv SUPABASE_PROJECT_ID || echo "Variable not found"
+          echo "===== CREATING SUPABASE BRANCH ENVIRONMENT ====="
           
-          # Use printenv instead of echo to avoid shell expansion issues
+          # Get Supabase project ID from Doppler with verification
+          echo "Step 1: Retrieving SUPABASE_PROJECT_ID from Doppler"
           PROJECT_ID=$(doppler run --project lpg --config dev -- printenv SUPABASE_PROJECT_ID)
-          echo "project_id=$PROJECT_ID" >> $GITHUB_OUTPUT
           
-          # More extensive debug info
-          echo "Supabase project ID (via echo expansion): '$PROJECT_ID'"
-          echo "Supabase CLI version: $(supabase --version)"
-          
+          # Validate project ID before proceeding
           if [ -z "$PROJECT_ID" ]; then
-            echo "::error::PROJECT_ID is empty after doppler run -- echo. This could be a shell expansion issue."
-            # Try alternate approach to get the variable directly
-            PROJECT_ID=$(doppler run --project lpg --config dev -- printenv SUPABASE_PROJECT_ID)
+            echo "::error::CRITICAL: SUPABASE_PROJECT_ID is empty or not set in Doppler"
             echo "PROJECT_ID from printenv: '$PROJECT_ID'"
+            exit 1
+          else 
+            echo "✅ Successfully retrieved PROJECT_ID: [${PROJECT_ID:0:5}...]" # Only show first 5 chars
             echo "project_id=$PROJECT_ID" >> $GITHUB_OUTPUT
           fi
           
-          # First link the project (required before branch operations)
-          echo "Linking to Supabase project $PROJECT_ID"
-          supabase link --project-ref $PROJECT_ID
+          echo "===== TESTING SUPABASE CLI ACCESS ====="
+          # Test Supabase CLI functionality before attempting branch operations
+          echo "Step 2: Checking Supabase auth status"
+          supabase projects list --access-token="$SUPABASE_ACCESS_TOKEN" || {
+            echo "::error::Failed to list Supabase projects. Check SUPABASE_ACCESS_TOKEN validity."
+            exit 1
+          }
           
+          echo "===== LINKING SUPABASE PROJECT ====="
+          # Link to Supabase project with enhanced error handling
+          echo "Step 3: Linking to Supabase project $PROJECT_ID"
+          supabase link --project-ref $PROJECT_ID || {
+            echo "::error::Failed to link Supabase project. Verify project ID and access token."
+            echo "Project ID: [${PROJECT_ID:0:5}...]"
+            echo "Checking if project exists:"
+            supabase projects list --access-token="$SUPABASE_ACCESS_TOKEN" | grep $PROJECT_ID || echo "Project not found in list"
+            exit 1
+          }
+          
+          echo "===== BRANCH ENVIRONMENT CREATION ====="
           # Create a PR-specific branch name with prefix for clarity
           BRANCH_NAME="pr-${{ github.event.number }}"
-          echo "PR-specific branch name: $BRANCH_NAME"
+          echo "Step 4: Creating/checking branch: $BRANCH_NAME"
           
-          # Check if branch already exists
-          BRANCH_EXISTS=$(supabase branches list --output=json --experimental | jq --arg branch "$BRANCH_NAME" '.[] | select(.name==$branch) | .id' -r || echo "")
+          # First check if preview branching is supported
+          echo "Checking if preview branching is enabled:"
+          supabase branches list --output=json --experimental || {
+            echo "::error::Preview branching appears to be disabled for this project"
+            echo "Please enable preview branching in your Supabase dashboard first"
+            exit 1
+          }
+          
+          # Now check if branch already exists with proper error handling
+          echo "Checking if branch already exists"
+          BRANCH_LIST=$(supabase branches list --output=json --experimental)
+          echo "Available branches: $BRANCH_LIST"
+          BRANCH_EXISTS=$(echo $BRANCH_LIST | jq --arg branch "$BRANCH_NAME" '.[] | select(.name==$branch) | .id' -r || echo "")
           
           if [ -z "$BRANCH_EXISTS" ]; then
             echo "Creating new Supabase branch: $BRANCH_NAME"
-            BRANCH_ID=$(supabase branches create "$BRANCH_NAME" --output=json --experimental | jq '.id' -r)
+            
+            # Attempt branch creation with comprehensive error handling
+            BRANCH_CREATION=$(supabase branches create "$BRANCH_NAME" --output=json --experimental 2>&1)
+            CREATION_STATUS=$?
+            
+            if [ $CREATION_STATUS -ne 0 ]; then
+              echo "::error::Failed to create branch: $BRANCH_NAME"
+              echo "Error output: $BRANCH_CREATION"
+              
+              # Check for common error patterns
+              if [[ "$BRANCH_CREATION" == *"Preview branching is not enabled"* ]]; then
+                echo "::error::Preview branching is not enabled for this project. Please enable it in Supabase dashboard."
+              elif [[ "$BRANCH_CREATION" == *"Cannot create preview branch from another branch project"* ]]; then
+                echo "::error::Cannot create a preview branch from another branch. Make sure you're connected to the main project."
+              elif [[ "$BRANCH_CREATION" == *"already exists"* ]]; then
+                echo "::warning::Branch already exists but wasn't detected in list. Continuing..."
+                # Try to get branch ID again
+                BRANCH_LIST=$(supabase branches list --output=json --experimental)
+                BRANCH_EXISTS=$(echo $BRANCH_LIST | jq --arg branch "$BRANCH_NAME" '.[] | select(.name==$branch) | .id' -r || echo "")
+                if [ -n "$BRANCH_EXISTS" ]; then
+                  BRANCH_ID=$BRANCH_EXISTS
+                else
+                  # Critical error - can't proceed without branch ID
+                  echo "::error::Cannot identify branch ID for existing branch. Stopping workflow."
+                  exit 1
+                fi
+              else
+                exit 1
+              fi
+            else
+              # Extract branch ID from successful creation
+              BRANCH_ID=$(echo "$BRANCH_CREATION" | jq '.id' -r)
+              if [ -z "$BRANCH_ID" ]; then
+                echo "::error::Failed to extract branch ID from Supabase response"
+                echo "Response: $BRANCH_CREATION"
+                exit 1
+              fi
+              echo "✅ Branch created successfully with ID: ${BRANCH_ID:0:8}..."
+            fi
+            
             echo "branch_id=$BRANCH_ID" >> $GITHUB_OUTPUT
             echo "created=true" >> $GITHUB_OUTPUT
           else
-            echo "Using existing Supabase branch: $BRANCH_NAME"
+            echo "Using existing Supabase branch: $BRANCH_NAME with ID: ${BRANCH_EXISTS:0:8}..."
             echo "branch_id=$BRANCH_EXISTS" >> $GITHUB_OUTPUT
             echo "created=false" >> $GITHUB_OUTPUT
           fi
@@ -134,15 +195,48 @@ jobs:
       - name: Apply migrations to branch
         working-directory: lpg-backend
         run: |
-          # Get current branch ID
+          echo "===== APPLYING MIGRATIONS TO BRANCH ENVIRONMENT ====="
+          # Get current branch ID and project ID from previous steps
           BRANCH_ID=${{ steps.supabase_branch.outputs.branch_id }}
-          
-          # Get Supabase project ID 
           PROJECT_ID=${{ steps.supabase_branch.outputs.project_id }}
           
-          # Apply migrations to the branch
-          echo "Applying migrations to branch: pr-${{ github.event.number }}"
-          supabase db push --experimental
+          # Verify we have the required values
+          if [ -z "$BRANCH_ID" ] || [ -z "$PROJECT_ID" ]; then
+            echo "::error::Missing required values: BRANCH_ID=$BRANCH_ID, PROJECT_ID=$PROJECT_ID"
+            exit 1
+          fi
+          
+          echo "Applying migrations to branch PR-${{ github.event.number }} (ID: ${BRANCH_ID:0:8}...)"
+          
+          # List available migrations first to verify they can be accessed
+          echo "Listing available migrations:"
+          supabase migration list --experimental || {
+            echo "::error::Failed to list migrations. Verify file structure and Supabase CLI access."
+            exit 1
+          }
+          
+          # Apply migrations with extended error handling
+          echo "Pushing migrations to branch..."
+          DB_PUSH_RESULT=$(supabase db push --experimental 2>&1)
+          PUSH_STATUS=$?
+          
+          if [ $PUSH_STATUS -ne 0 ]; then
+            echo "::error::Failed to push migrations to branch"
+            echo "Error output: $DB_PUSH_RESULT"
+            
+            # Check for common error patterns
+            if [[ "$DB_PUSH_RESULT" == *"connection refused"* ]]; then
+              echo "::error::Database connection refused. Verify network access and credentials."
+            elif [[ "$DB_PUSH_RESULT" == *"SASL auth"* ]]; then
+              echo "::error::SASL authentication failed. Check database credentials in Doppler."
+            else
+              echo "::error::Unknown error pushing migrations. See logs for details."
+            fi
+            
+            exit 1
+          else
+            echo "✅ Successfully applied migrations to branch environment"
+          fi
       
       # Run migration validation
       - name: Validate migrations
