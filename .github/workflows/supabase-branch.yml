@@ -39,7 +39,7 @@ jobs:
       # Install Supabase CLI using official action
       - uses: supabase/setup-cli@v1
         with:
-          version: 2.22.6
+          version: latest
           
       - name: Verify Supabase CLI
         run: |
@@ -92,8 +92,8 @@ jobs:
           echo "Direct access to SUPABASE_PROJECT_ID:" 
           doppler run --project lpg --config dev -- printenv SUPABASE_PROJECT_ID || echo "Variable not found"
           
-          # Now get it via echo expansion to check if there's a shell expansion issue
-          PROJECT_ID=$(doppler run --project lpg --config dev -- echo $SUPABASE_PROJECT_ID)
+          # Use printenv instead of echo to avoid shell expansion issues
+          PROJECT_ID=$(doppler run --project lpg --config dev -- printenv SUPABASE_PROJECT_ID)
           echo "project_id=$PROJECT_ID" >> $GITHUB_OUTPUT
           
           # More extensive debug info
