@@ -69,16 +69,24 @@ jobs:
           PROJECT_ID=$(doppler run --project lpg --config dev -- echo $SUPABASE_PROJECT_ID)
           echo "project_id=$PROJECT_ID" >> $GITHUB_OUTPUT
           
+          # Debug info for troubleshooting
+          echo "Supabase project ID: $PROJECT_ID"
+          echo "Supabase CLI version: $(supabase --version)"
+          
+          # First link the project (required before branch operations)
+          echo "Linking to Supabase project $PROJECT_ID"
+          supabase link --project-id $PROJECT_ID
+          
           # Create a PR-specific branch name with prefix for clarity
           BRANCH_NAME="pr-${{ github.event.number }}"
           echo "PR-specific branch name: $BRANCH_NAME"
           
           # Check if branch already exists
-          BRANCH_EXISTS=$(supabase branches list --project-ref=$PROJECT_ID --output=json --experimental | jq --arg branch "$BRANCH_NAME" '.[] | select(.name==$branch) | .id' -r || echo "")
+          BRANCH_EXISTS=$(supabase branches list --output=json --experimental | jq --arg branch "$BRANCH_NAME" '.[] | select(.name==$branch) | .id' -r || echo "")
           
           if [ -z "$BRANCH_EXISTS" ]; then
             echo "Creating new Supabase branch: $BRANCH_NAME"
-            BRANCH_ID=$(supabase branches create "$BRANCH_NAME" --project-ref=$PROJECT_ID --output=json --experimental | jq '.id' -r)
+            BRANCH_ID=$(supabase branches create "$BRANCH_NAME" --output=json --experimental | jq '.id' -r)
             echo "branch_id=$BRANCH_ID" >> $GITHUB_OUTPUT
             echo "created=true" >> $GITHUB_OUTPUT
           else
@@ -99,7 +107,7 @@ jobs:
           
           # Apply migrations to the branch
           echo "Applying migrations to branch: pr-${{ github.event.number }}"
-          supabase db push --project-ref=$PROJECT_ID --experimental
+          supabase db push --experimental
       
       # Run migration validation
       - name: Validate migrations
@@ -131,13 +139,13 @@ jobs:
             To connect to this branch environment locally:
             \`\`\`bash
             cd lpg-backend
-            supabase link --project-ref=${projectId} --branch=${branchId}
+            supabase link --project-id=${projectId} --branch=${branchId}
             \`\`\`
             
             To run migrations against this branch:
             \`\`\`bash
             cd lpg-backend
-            supabase db push --branch=${branchId}
+            supabase db push --experimental
             \`\`\`
             
             ℹ️ You can view this branch in the Supabase Dashboard under **Project Settings → Branch Environments**
