@@ -60,7 +60,11 @@ async function apiClient<T>(
     return data;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'An unknown API error occurred';
-    logger.error(`API Request Failed: ${method} ${endpoint}`, { body, options }, error instanceof Error ? error : new Error(String(error)));
+    const logContext: Record<string, any> = { body };
+    if (options !== undefined) {
+      logContext.options = options;
+    }
+    logger.error(`API Request Failed: ${method} ${endpoint}`, logContext, error instanceof Error ? error : new Error(String(error)));
     throw new Error(errorMessage);
   }
 }

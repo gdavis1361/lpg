@@ -1,5 +1,5 @@
 // src/lib/api/apiClient.ts
-import { Database } from '@/supabase-types'; // Assuming types will be generated here
+import { Database } from '@/types/supabase'; // Assuming types will be generated here
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '/api'; // Example, adjust as needed
 

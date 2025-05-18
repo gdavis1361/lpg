@@ -3,7 +3,7 @@
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { createClientComponentClient, User } from '@supabase/auth-helpers-nextjs';
-import { Database } from '@/supabase-types'; // Your generated Supabase types
+import { Database } from '@/types/supabase'; // Your generated Supabase types
 import logger from '@/lib/logger'; // Import the logger
 
 interface AuthContextType {
@@ -36,7 +36,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
 
     return () => {
-      authListener?.unsubscribe();
+      authListener?.subscription?.unsubscribe();
     };
   }, [supabase]);
 
