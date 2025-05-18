@@ -1,3 +1,7 @@
+---
+**Note:** The TypeScript Strict Mode implementation project outlined in this document was completed in May 2025. For current guidelines, configuration details, and best practices for maintaining TypeScript strict mode in this project, please refer to the [TypeScript Strict Mode Guide](./typescript-strict-mode-guide.md). This document is retained for historical reference regarding the initial implementation steps.
+---
+
 # TypeScript Strict Mode Implementation Guide
 
 ## Objective
