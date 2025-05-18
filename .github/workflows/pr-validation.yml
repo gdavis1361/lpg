@@ -1,0 +1,128 @@
+name: PR Validation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'lpg-backend/supabase/**'
+      - '.github/workflows/pr-validation.yml'
+
+permissions:
+  contents: read
+  pull-requests: write  # needed for PR comments
+  issues: write         # needed for PR comments
+
+jobs:
+  validate-migrations:
+    runs-on: ubuntu-latest
+
+    env:
+      # Provided by repo secrets → Doppler can fetch all other vars
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+
+    steps:
+      # ───── Checkout code ───────────────────────────
+      - uses: actions/checkout@v4
+
+      # ───── Node & NPM cache ────────────────────────
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: '**/package-lock.json'
+
+      # ───── Install backend dependencies ────────────
+      - name: Install backend dependencies
+        working-directory: lpg-backend
+        run: |
+          npm install --legacy-peer-deps
+          echo "Node $(node -v)"
+          echo "NPM  $(npm -v)"
+
+      # ───── Supabase CLI ────────────────────────────
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Verify Supabase CLI
+        run: echo "Supabase CLI $(supabase --version)"
+
+      # ───── Doppler CLI ─────────────────────────────
+      - uses: dopplerhq/cli-action@v2
+
+      - name: Setup Doppler
+        run: |
+          doppler setup --no-interactive \
+            --token="${{ secrets.DOPPLER_TOKEN }}" \
+            --project=lpg \
+            --config=dev
+
+      # ───── Diagnostics & Env Validation ────────────
+      - name: Validate Environment Configuration
+        id: envcheck
+        working-directory: lpg-backend
+        run: |
+          set -e
+          echo "===== ENVIRONMENT VALIDATION ====="
+          doppler --version
+
+          # Fail fast if critical env vars are missing
+          if ! doppler run --project lpg --config dev -- bash -c 'printenv SUPABASE_ACCESS_TOKEN'; then
+            echo "::error::SUPABASE_ACCESS_TOKEN missing in Doppler"
+            exit 1
+          fi
+
+          if ! doppler run --project lpg --config dev -- bash -c 'printenv SUPABASE_PROJECT_ID'; then
+            echo "::error::SUPABASE_PROJECT_ID missing in Doppler"
+            exit 1
+          fi
+
+          echo "✓ Required Supabase env vars present"
+          echo "===== AVAILABLE MIGRATIONS ====="
+          ls -la supabase/migrations/
+
+      # ───── Run migration validation ────────────────
+      - name: Validate migrations
+        working-directory: lpg-backend
+        run: |
+          echo "===== VALIDATING DATABASE MIGRATIONS ====="
+          doppler run --project lpg --config dev -- npm run validate
+
+      # ───── Comment success on PR ───────────────────
+      - name: Post migration validation report
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## Migration Validation Success ✅
+
+              Your database migrations have passed validation!
+
+              ### Next steps
+              1. **Local development**: \`npm run migrate\`
+              2. **Code review**: Migrations are ready for review
+              3. **Deployment**: After merge, changes will be applied to the dev environment
+              `
+            })
+
+      # ───── Comment failure on PR ───────────────────
+      - name: Post migration validation failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ❌ Migration Validation Failed
+
+              One or more database migrations failed validation.
+              Please review the workflow logs for details.`
+            })
