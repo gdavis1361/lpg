@@ -53,6 +53,28 @@ jobs:
         run: |
           doppler setup --no-interactive --token=${{ secrets.DOPPLER_TOKEN }} --project=lpg --config=dev
       
+      # Add diagnostic steps to validate Doppler and environment variables
+      - name: Diagnose Doppler and SUPABASE_PROJECT_ID
+        working-directory: lpg-backend
+        run: |
+          echo "== Doppler CLI Version =="
+          doppler --version
+
+          echo "== SUPABASE_PROJECT_ID direct Doppler fetch =="
+          doppler run --project lpg --config dev -- printenv SUPABASE_PROJECT_ID
+
+          echo "== All env variables containing 'SUPABASE' =="
+          doppler run --project lpg --config dev -- env | grep SUPABASE || true
+
+          PROJECT_ID=$(doppler run --project lpg --config dev -- printenv SUPABASE_PROJECT_ID)
+          echo "PROJECT_ID='$PROJECT_ID'"
+          if [ -z "$PROJECT_ID" ]; then
+            echo "::error::SUPABASE_PROJECT_ID is missing or empty in Doppler."
+            exit 1
+          else
+            echo "::notice::SUPABASE_PROJECT_ID successfully fetched: $PROJECT_ID"
+          fi
+      
       # This step is no longer needed since we use PR number directly
       # But keeping a simplified version for backwards compatibility
       - name: Extract branch name
@@ -66,12 +88,25 @@ jobs:
         working-directory: lpg-backend
         run: |
           # Get Supabase project ID from Doppler
+          # First capture direct printenv output to verify variable exists
+          echo "Direct access to SUPABASE_PROJECT_ID:" 
+          doppler run --project lpg --config dev -- printenv SUPABASE_PROJECT_ID || echo "Variable not found"
+          
+          # Now get it via echo expansion to check if there's a shell expansion issue
           PROJECT_ID=$(doppler run --project lpg --config dev -- echo $SUPABASE_PROJECT_ID)
           echo "project_id=$PROJECT_ID" >> $GITHUB_OUTPUT
           
-          # Debug info for troubleshooting
-          echo "Supabase project ID: $PROJECT_ID"
+          # More extensive debug info
+          echo "Supabase project ID (via echo expansion): '$PROJECT_ID'"
           echo "Supabase CLI version: $(supabase --version)"
+          
+          if [ -z "$PROJECT_ID" ]; then
+            echo "::error::PROJECT_ID is empty after doppler run -- echo. This could be a shell expansion issue."
+            # Try alternate approach to get the variable directly
+            PROJECT_ID=$(doppler run --project lpg --config dev -- printenv SUPABASE_PROJECT_ID)
+            echo "PROJECT_ID from printenv: '$PROJECT_ID'"
+            echo "project_id=$PROJECT_ID" >> $GITHUB_OUTPUT
+          fi
           
           # First link the project (required before branch operations)
           echo "Linking to Supabase project $PROJECT_ID"
