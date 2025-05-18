@@ -1,0 +1,76 @@
+name: Seed Database
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to seed'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      project_ref:
+        description: 'Override project reference ID (optional)'
+        required: false
+        type: string
+
+jobs:
+  seed-database:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+        
+      - name: Install Supabase CLI
+        run: npm install -g supabase
+      
+      - name: Setup Doppler
+        uses: dopplerhq/cli-action@v1
+        
+      - name: Set project ref
+        id: set-project
+        run: |
+          if [ -n "${{ github.event.inputs.project_ref }}" ]; then
+            echo "PROJECT_REF=${{ github.event.inputs.project_ref }}" >> $GITHUB_ENV
+          elif [ "${{ github.event.inputs.environment }}" == "prod" ]; then
+            # TODO: Set up SUPABASE_PRODUCTION_PROJECT_REF secret in GitHub
+            echo "PROJECT_REF=YOUR_PRODUCTION_PROJECT_REF" >> $GITHUB_ENV
+          elif [ "${{ github.event.inputs.environment }}" == "staging" ]; then
+            echo "PROJECT_REF=saiqesfahvvuavyhrfde" >> $GITHUB_ENV
+          else
+            # TODO: Set up SUPABASE_DEV_PROJECT_REF secret in GitHub
+            echo "PROJECT_REF=fraeukusvcvcnoffuoxq" >> $GITHUB_ENV
+          fi
+      
+      - name: Seed dev/staging database
+        if: ${{ github.event.inputs.environment != 'prod' }}
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+        run: |
+          doppler run --project lpg --config dev -- \
+          supabase db execute \
+            --project-ref $PROJECT_REF \
+            --file ./lpg-backend/supabase/seed-dev.sql
+            
+      - name: Seed production database
+        if: ${{ github.event.inputs.environment == 'prod' }}
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+        run: |
+          # In production, we only seed reference data, not sample data
+          doppler run --project lpg --config dev -- \
+          supabase db execute \
+            --project-ref $PROJECT_REF \
+            --file ./lpg-backend/supabase/seed-prod.sql

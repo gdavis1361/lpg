@@ -6,6 +6,7 @@ This monorepo contains the frontend (`lpg-ui`) and backend (`lpg-backend`) for t
 
 - `lpg-ui/`: Next.js frontend application.
 - `lpg-backend/`: Supabase backend project (migrations, etc.).
+  - `lpg-backend/supabase/DATABASE_SEEDING.md`: Documentation on our database seeding strategy and workflow.
 - `docs/`: Project documentation and design files.
 
 ### Repository History
