@@ -1,6 +1,6 @@
 -- Test seed data for branch environment workflow
 -- This file adds a sample record to test the workflow
--- Updated on May 18, 2025 to trigger CI with new Doppler integration
+-- Updated on May 18, 2025 to trigger CI with new Doppler integration (attempt 2)
 
 -- Insert a test record (will only run if the table exists)
 DO $$
