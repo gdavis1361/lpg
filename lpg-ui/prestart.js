@@ -88,6 +88,29 @@ try {
   } catch (err) {
     log(`Tailwind CSS not found: ${err.message}`);
   }
+
+  // Check for @tailwindcss/oxide
+  try {
+    const oxidePackageJsonPath = require.resolve('@tailwindcss/oxide/package.json');
+    const oxideDir = path.dirname(oxidePackageJsonPath);
+    log(`Custom Log: @tailwindcss/oxide package.json found at: ${oxidePackageJsonPath}`);
+    log(`Custom Log: @tailwindcss/oxide directory is: ${oxideDir}`);
+    if (fs.existsSync(oxideDir)) {
+      const oxideFiles = fs.readdirSync(oxideDir);
+      log(`Custom Log: @tailwindcss/oxide directory contents: ${oxideFiles.join(', ')}`);
+      // Specifically look for .node files or common native binary names
+      const nativeOxideFiles = oxideFiles.filter(f => f.endsWith('.node') || f.startsWith('oxide.') || f.includes(process.platform) || f.includes(process.arch));
+      if (nativeOxideFiles.length > 0) {
+        log(`Custom Log: Potential native binaries in @tailwindcss/oxide: ${nativeOxideFiles.join(', ')}`);
+      } else {
+        log('Custom Log: No obvious native binaries found in @tailwindcss/oxide directory.');
+      }
+    } else {
+      log('Custom Log: @tailwindcss/oxide directory does not exist (should not happen if package.json was resolved).');
+    }
+  } catch (err) {
+    log(`Custom Log: Error locating or inspecting @tailwindcss/oxide: ${err.message}`);
+  }
   
   // Check for Lightning CSS
   try {

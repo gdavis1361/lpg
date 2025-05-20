@@ -28,6 +28,19 @@ const originalLoad = Module._load;
 
 // Create a patched version that intercepts Lightning CSS native module loads
 Module._load = function(request, parent, isMain) {
+  // Logging for @tailwindcss/oxide
+  if (request.includes('@tailwindcss/oxide')) {
+    log(`[ModulePatch Custom Log] Oxide module requested: ${request}`);
+    log(`[ModulePatch Custom Log] Parent module for Oxide: ${parent ? parent.filename : 'unknown'}`);
+    try {
+      const resolvedPath = Module._resolveFilename(request, parent);
+      log(`[ModulePatch Custom Log] Resolved path for Oxide module ${request}: ${resolvedPath}`);
+      // You could add more checks here if needed, e.g., fs.existsSync(resolvedPath)
+    } catch (e) {
+      log(`[ModulePatch Custom Log] Error resolving Oxide module ${request}: ${e.message}`);
+    }
+  }
+
   if (request.includes('lightningcss') && request.includes('.node')) {
     log(`Intercepted native module load: ${request}`);
     log(`Parent module: ${parent ? parent.filename : 'unknown'}`);
