@@ -44,7 +44,7 @@ jobs:
       
       - name: Verify environment variables
         run: |
-          cd lpg-ui && doppler run --project lpg --config dev -- node scripts/env-monitor.js --check-doppler
+          cd lpg-ui && doppler run --project lpg --config dev -- node scripts/validate-env.js --check-doppler
       
       # Add notification step for failures
       - name: Notify on failure
