@@ -20,6 +20,9 @@ DECLARE
   suggestion_count INTEGER := 0;
   error_message TEXT;
 BEGIN
+  -- Set appropriate isolation level
+  SET LOCAL transaction_isolation TO 'read committed';
+  
   -- Explicit transaction control
   BEGIN
     -- Stage potential suggestions in a temporary table for better performance

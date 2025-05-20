@@ -36,6 +36,9 @@ DECLARE
   v_temp_table_name TEXT;
   v_duration_ms INTEGER;
 BEGIN
+  -- Set appropriate isolation level for consistent view of data
+  SET LOCAL transaction_isolation TO 'repeatable read';
+  
   -- Record start time
   v_start_time := clock_timestamp();
   

@@ -1,8 +1,11 @@
 -- Migration: 20250530000000_timeline_event_sourcing.sql
--- Purpose: Implements a centralized event log table for relationship timelines.
+-- Purpose: Implements a centralized event log table for relationship timelines with range partitioning.
 
--- 1. Create timeline_events table
-CREATE TABLE IF NOT EXISTS public.timeline_events (
+-- 1. Create partitioned timeline_events table
+-- Drop the original table if it exists and recreate as partitioned
+DROP TABLE IF EXISTS public.timeline_events CASCADE;
+
+CREATE TABLE public.timeline_events (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   event_type TEXT NOT NULL,                           -- e.g., 'interaction_created', 'relationship_started', 'milestone_achieved'
   event_date TIMESTAMPTZ NOT NULL,                    -- Timestamp of when the actual event occurred
@@ -17,14 +20,90 @@ CREATE TABLE IF NOT EXISTS public.timeline_events (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),      -- When this record was last updated
   is_deleted BOOLEAN DEFAULT FALSE,                   -- Soft delete flag
   UNIQUE(source_entity_type, source_entity_id, event_type, person_id) -- Ensures no duplicate events for same entity/type/person
-);
+) PARTITION BY RANGE (event_date);
 
--- 2. Create indexes for efficient querying
-CREATE INDEX idx_timeline_events_person_date ON timeline_events(person_id, event_date DESC);
-CREATE INDEX idx_timeline_events_relationship_date ON timeline_events(relationship_id, event_date DESC);
-CREATE INDEX idx_timeline_events_source ON timeline_events(source_entity_type, source_entity_id);
-CREATE INDEX idx_timeline_events_type_date ON timeline_events(event_type, event_date DESC);
-CREATE INDEX idx_timeline_events_active ON timeline_events(source_entity_type, source_entity_id) WHERE NOT is_deleted;
+-- Create initial partitions (one per quarter for current + next year)
+CREATE TABLE timeline_events_2025q1 PARTITION OF timeline_events
+  FOR VALUES FROM ('2025-01-01') TO ('2025-04-01');
+CREATE TABLE timeline_events_2025q2 PARTITION OF timeline_events
+  FOR VALUES FROM ('2025-04-01') TO ('2025-07-01');
+CREATE TABLE timeline_events_2025q3 PARTITION OF timeline_events
+  FOR VALUES FROM ('2025-07-01') TO ('2025-10-01');
+CREATE TABLE timeline_events_2025q4 PARTITION OF timeline_events
+  FOR VALUES FROM ('2025-10-01') TO ('2026-01-01');
+CREATE TABLE timeline_events_2026q1 PARTITION OF timeline_events
+  FOR VALUES FROM ('2026-01-01') TO ('2026-04-01');
+
+-- Create partition for older data
+CREATE TABLE timeline_events_historical PARTITION OF timeline_events
+  FOR VALUES FROM (MINVALUE) TO ('2025-01-01');
+
+-- Create default partition for future data
+CREATE TABLE timeline_events_future PARTITION OF timeline_events
+  FOR VALUES FROM ('2026-04-01') TO (MAXVALUE);
+
+-- 2. Create indexes for efficient querying (now created on each partition automatically)
+-- Indexes are created automatically on each partition
+-- The partitioning column (event_date) is automatically indexed on all partitions
+
+-- Create partition maintenance function
+CREATE OR REPLACE FUNCTION maintain_timeline_partitions()
+RETURNS VOID AS $$
+DECLARE
+  next_quarter_start DATE;
+  partition_name TEXT;
+  current_max_date DATE;
+  partition_count INTEGER;
+BEGIN
+  -- Find the latest partition boundary (excluding future partition)
+  SELECT to_date(substring(relname FROM 'timeline_events_([0-9]{4}q[1-4])$'), 'YYYYqQ') + INTERVAL '3 months'
+  INTO current_max_date
+  FROM pg_class c
+  JOIN pg_namespace n ON c.relnamespace = n.oid
+  WHERE n.nspname = 'public'
+    AND c.relname ~ '^timeline_events_[0-9]{4}q[1-4]$'
+  ORDER BY to_date(substring(relname FROM 'timeline_events_([0-9]{4}q[1-4])$'), 'YYYYqQ') DESC
+  LIMIT 1;
+  
+  -- If we're within 60 days of needing a new partition, create it
+  IF current_max_date - CURRENT_DATE <= 60 THEN
+    -- Determine the next quarter start date
+    next_quarter_start := current_max_date;
+    
+    -- Get the year and quarter
+    partition_name := 'timeline_events_' || 
+                      to_char(next_quarter_start, 'YYYY') || 'q' || 
+                      to_char(next_quarter_start, 'Q');
+    
+    -- Create the new partition
+    EXECUTE format('
+      CREATE TABLE %I PARTITION OF timeline_events
+      FOR VALUES FROM (%L) TO (%L)',
+      partition_name,
+      next_quarter_start,
+      next_quarter_start + INTERVAL '3 months'
+    );
+    
+    RAISE NOTICE 'Created new partition: %', partition_name;
+  END IF;
+
+  -- Count total partitions and log
+  SELECT count(*) INTO partition_count
+  FROM pg_class c
+  JOIN pg_namespace n ON c.relnamespace = n.oid
+  WHERE n.nspname = 'public'
+    AND c.relname ~ '^timeline_events_';
+  
+  RAISE NOTICE 'Current timeline_events partition count: %', partition_count;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Schedule quarterly maintenance
+SELECT cron.schedule(
+  'maintain_timeline_partitions_quarterly',
+  '0 0 1 */3 *', -- First day of every quarter
+  'SELECT maintain_timeline_partitions();'
+);
 
 -- 3. Create function to handle event modifications
 CREATE OR REPLACE FUNCTION merge_timeline_event(
@@ -915,6 +994,263 @@ $$ LANGUAGE plpgsql;
 -- DROP FUNCTION backfill_all_timeline_events();
 */
 COMMENT ON FUNCTION public.populate_timeline_from_source() IS 'Trigger function to populate the timeline_events table based on INSERT operations on source tables. Backfill of historical data must be handled separately.';
+
+-- Create consolidated timeline event trigger function to optimize trigger chain
+CREATE OR REPLACE FUNCTION handle_consolidated_timeline_events()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_title TEXT;
+  v_description TEXT;
+  v_person_record RECORD;
+  v_relationship_id UUID;
+  v_from_person_name TEXT;
+  v_to_person_name TEXT;
+  v_relationship_type TEXT;
+  v_milestone_name TEXT;
+  v_from_person_id UUID;
+  v_to_person_id UUID;
+  v_payload JSONB;
+BEGIN
+  -- Use TG_TABLE_NAME to determine source entity type
+  IF TG_OP = 'DELETE' THEN
+    -- Mark related events as deleted
+    PERFORM soft_delete_timeline_event(TG_TABLE_NAME::text, OLD.id);
+    RETURN OLD;
+  END IF;
+
+  IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN
+    CASE TG_TABLE_NAME
+      WHEN 'interactions' THEN
+        -- Get the title and description
+        v_title := NEW.title;
+        v_description := NEW.description;
+        
+        -- For each participant, create a timeline event
+        FOR v_person_record IN 
+          SELECT ip.person_id 
+          FROM interaction_participants ip 
+          WHERE ip.interaction_id = NEW.id
+        LOOP
+          -- Get relationship if exists
+          SELECT r.id INTO v_relationship_id
+          FROM relationships r
+          WHERE (r.from_person_id = v_person_record.person_id OR r.to_person_id = v_person_record.person_id)
+            AND EXISTS (
+              SELECT 1 FROM interaction_participants ip2 
+              WHERE ip2.interaction_id = NEW.id 
+                AND ip2.person_id != v_person_record.person_id
+                AND (ip2.person_id = r.from_person_id OR ip2.person_id = r.to_person_id)
+            )
+          LIMIT 1;
+          
+          PERFORM merge_timeline_event(
+            'interaction_created',
+            NEW.start_time,
+            v_title,
+            v_description,
+            v_person_record.person_id,
+            v_relationship_id,
+            'interaction',
+            NEW.id,
+            jsonb_build_object(
+              'location', NEW.location,
+              'interaction_type', NEW.interaction_type,
+              'duration_minutes', EXTRACT(EPOCH FROM (NEW.end_time - NEW.start_time))/60
+            )
+          );
+        END LOOP;
+      
+      WHEN 'relationships' THEN
+        -- Get names and relationship type for the title/description
+        SELECT 
+          CONCAT(p1.first_name, ' ', p1.last_name),
+          CONCAT(p2.first_name, ' ', p2.last_name),
+          rt.name
+        INTO 
+          v_from_person_name,
+          v_to_person_name,
+          v_relationship_type
+        FROM people p1, people p2, relationship_types rt
+        WHERE p1.id = NEW.from_person_id
+          AND p2.id = NEW.to_person_id
+          AND rt.id = NEW.relationship_type_id;
+
+        IF TG_OP = 'INSERT' THEN
+          v_title := 'New ' || v_relationship_type || ' relationship';
+          v_description := v_from_person_name || ' started a ' || v_relationship_type || ' relationship with ' || v_to_person_name;
+        ELSIF TG_OP = 'UPDATE' AND NEW.status != OLD.status THEN
+          v_title := v_relationship_type || ' relationship ' || NEW.status;
+          v_description := 'Relationship between ' || v_from_person_name || ' and ' || v_to_person_name || ' is now ' || NEW.status;
+        ELSE
+          -- Skip other updates that don't change status
+          RETURN NEW;
+        END IF;
+        
+        -- Create or update the timeline event for the "from" person
+        PERFORM merge_timeline_event(
+          CASE 
+            WHEN TG_OP = 'INSERT' THEN 'relationship_created'
+            ELSE 'relationship_updated'
+          END,
+          NEW.created_at,
+          v_title,
+          v_description,
+          NEW.from_person_id,
+          NEW.id,
+          'relationship',
+          NEW.id,
+          jsonb_build_object(
+            'status', NEW.status,
+            'relationship_type', v_relationship_type
+          )
+        );
+        
+        -- Create or update the timeline event for the "to" person as well
+        PERFORM merge_timeline_event(
+          CASE 
+            WHEN TG_OP = 'INSERT' THEN 'relationship_created'
+            ELSE 'relationship_updated'
+          END,
+          NEW.created_at,
+          v_title,
+          v_description,
+          NEW.to_person_id,
+          NEW.id,
+          'relationship',
+          NEW.id,
+          jsonb_build_object(
+            'status', NEW.status,
+            'relationship_type', v_relationship_type
+          )
+        );
+
+      WHEN 'relationship_milestones' THEN
+        -- Get milestone name and relationship persons
+        SELECT 
+          mm.name,
+          r.from_person_id,
+          r.to_person_id
+        INTO 
+          v_milestone_name,
+          v_from_person_id,
+          v_to_person_id
+        FROM mentor_milestones mm, relationships r
+        WHERE mm.id = NEW.milestone_id
+          AND r.id = NEW.relationship_id;
+        
+        -- Set title and description
+        v_title := 'Milestone: ' || v_milestone_name;
+        v_description := NEW.evidence_description;
+        
+        -- Create or update the timeline event for the mentor (from_person)
+        PERFORM merge_timeline_event(
+          'milestone_achieved',
+          NEW.achieved_date,
+          v_title,
+          v_description,
+          v_from_person_id,
+          NEW.relationship_id,
+          'milestone',
+          NEW.id,
+          jsonb_build_object(
+            'milestone_name', v_milestone_name,
+            'evidence_url', NEW.evidence_url
+          )
+        );
+        
+        -- Create or update the timeline event for the student (to_person)
+        PERFORM merge_timeline_event(
+          'milestone_achieved',
+          NEW.achieved_date,
+          v_title,
+          v_description,
+          v_to_person_id,
+          NEW.relationship_id,
+          'milestone',
+          NEW.id,
+          jsonb_build_object(
+            'milestone_name', v_milestone_name,
+            'evidence_url', NEW.evidence_url
+          )
+        );
+
+      WHEN 'cross_group_participations' THEN
+        -- Get activity group names
+        SELECT jsonb_build_object(
+          'recognition_points', NEW.recognition_points,
+          'visited_activity', visited_ag.name,
+          'home_activity', home_ag.name
+        ) INTO v_payload
+        FROM activity_groups visited_ag, activity_groups home_ag
+        WHERE visited_ag.id = NEW.visited_activity_id
+          AND home_ag.id = NEW.home_activity_id;
+        
+        v_title := 'Cross-group: Visited ' || v_payload->>'visited_activity' || ' (from ' || v_payload->>'home_activity' || ')';
+        
+        PERFORM merge_timeline_event(
+          'cross_group_participation',
+          NEW.event_date,
+          v_title,
+          NEW.event_description,
+          NEW.person_id,
+          NULL,
+          'cross_group_participations',
+          NEW.id,
+          v_payload
+        );
+
+      WHEN 'alumni_checkins' THEN
+        v_title := 'Alumni Check-in via ' || NEW.check_method;
+        v_payload := jsonb_build_object(
+          'wellbeing_score', NEW.wellbeing_score, 
+          'needs_followup', NEW.needs_followup
+        );
+        
+        PERFORM merge_timeline_event(
+          'alumni_checkin',
+          NEW.check_date,
+          v_title,
+          NEW.status_update,
+          NEW.alumni_id,
+          NULL,
+          'alumni_checkins',
+          NEW.id,
+          v_payload
+        );
+    END CASE;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Replace multiple triggers with consolidated trigger
+DROP TRIGGER IF EXISTS interaction_timeline_trigger ON interactions;
+DROP TRIGGER IF EXISTS relationship_timeline_trigger ON relationships;
+DROP TRIGGER IF EXISTS milestone_timeline_trigger ON relationship_milestones;
+DROP TRIGGER IF EXISTS cross_group_timeline_trigger ON cross_group_participations;
+DROP TRIGGER IF EXISTS alumni_checkin_timeline_trigger ON alumni_checkins;
+
+-- Add consolidated triggers
+CREATE TRIGGER consolidated_interaction_timeline_trigger
+AFTER INSERT OR UPDATE OR DELETE ON interactions
+FOR EACH ROW EXECUTE FUNCTION handle_consolidated_timeline_events();
+
+CREATE TRIGGER consolidated_relationship_timeline_trigger
+AFTER INSERT OR UPDATE OR DELETE ON relationships
+FOR EACH ROW EXECUTE FUNCTION handle_consolidated_timeline_events();
+
+CREATE TRIGGER consolidated_milestone_timeline_trigger
+AFTER INSERT OR UPDATE OR DELETE ON relationship_milestones
+FOR EACH ROW EXECUTE FUNCTION handle_consolidated_timeline_events();
+
+CREATE TRIGGER consolidated_cross_group_timeline_trigger
+AFTER INSERT OR UPDATE OR DELETE ON cross_group_participations
+FOR EACH ROW EXECUTE FUNCTION handle_consolidated_timeline_events();
+
+CREATE TRIGGER consolidated_alumni_checkin_timeline_trigger
+AFTER INSERT OR UPDATE OR DELETE ON alumni_checkins
+FOR EACH ROW EXECUTE FUNCTION handle_consolidated_timeline_events();
 
 -- Note: The original `relationship_timeline_events` VIEW (from 20250524010000_relationship_timeline.sql)
 -- should eventually be refactored to select from `timeline_events` or dropped if applications query `timeline_events` directly.

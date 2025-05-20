@@ -341,3 +341,66 @@ COMMENT ON TABLE mentor_student_relationships IS 'Denormalized lookup table for 
 COMMENT ON FUNCTION update_mentor_student_table IS 'Trigger function to maintain the mentor_student_relationships table';
 COMMENT ON FUNCTION is_mentor_for IS 'Check if the current user is a mentor for a specific student';
 COMMENT ON VIEW user_permissions IS 'Consolidated view of user permissions based on roles and relationships';
+
+-- Apply RLS to materialized views to avoid security policy bypass
+
+-- Enable RLS on relationship_strength_analytics_mv
+ALTER MATERIALIZED VIEW relationship_strength_analytics_mv ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY relationship_strength_mv_access ON relationship_strength_analytics_mv
+  FOR SELECT 
+  USING (
+    from_person_id = get_current_user_person_id()
+    OR to_person_id = get_current_user_person_id()
+    OR EXISTS (
+      SELECT 1 FROM mentor_student_relationships msr
+      WHERE msr.mentor_id = get_current_user_person_id()
+        AND (msr.student_id = from_person_id OR msr.student_id = to_person_id)
+    )
+    OR has_permission('admin')
+    OR has_permission('staff')
+  );
+
+-- Enable RLS on mentor_relationship_health_mv
+ALTER MATERIALIZED VIEW mentor_relationship_health_mv ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY mentor_relationship_health_mv_access ON mentor_relationship_health_mv
+  FOR SELECT 
+  USING (
+    mentor_id = get_current_user_person_id()
+    OR student_id = get_current_user_person_id()
+    OR has_permission('admin')
+    OR has_permission('staff')
+  );
+
+-- Enable RLS on brotherhood_visibility_mv
+ALTER MATERIALIZED VIEW brotherhood_visibility_mv ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY brotherhood_visibility_mv_access ON brotherhood_visibility_mv
+  FOR SELECT 
+  USING (
+    person_id = get_current_user_person_id()
+    OR EXISTS (
+      SELECT 1 FROM mentor_student_relationships msr
+      WHERE msr.mentor_id = get_current_user_person_id()
+        AND msr.student_id = person_id
+    )
+    OR has_permission('admin')
+    OR has_permission('staff')
+  );
+
+-- Enable RLS on alumni_risk_assessment_mv
+ALTER MATERIALIZED VIEW alumni_risk_assessment_mv ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY alumni_risk_assessment_mv_access ON alumni_risk_assessment_mv
+  FOR SELECT 
+  USING (
+    alumni_id = get_current_user_person_id()
+    OR has_permission('admin')
+    OR has_permission('staff')
+  );
+
+COMMENT ON POLICY relationship_strength_mv_access ON relationship_strength_analytics_mv IS 'Controls access to relationship strength analytics';
+COMMENT ON POLICY mentor_relationship_health_mv_access ON mentor_relationship_health_mv IS 'Controls access to mentor relationship health analysis';
+COMMENT ON POLICY brotherhood_visibility_mv_access ON brotherhood_visibility_mv IS 'Controls access to brotherhood visibility analysis';
+COMMENT ON POLICY alumni_risk_assessment_mv_access ON alumni_risk_assessment_mv IS 'Controls access to alumni risk assessment data';
