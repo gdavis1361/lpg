@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # Cleanup script for source control issues
 
@@ -6,11 +7,11 @@ echo "Starting repository cleanup..."
 
 # 1. Remove .DS_Store files from git repository
 echo "Removing .DS_Store files from git index..."
-find . -name ".DS_Store" | xargs git rm --cached
+find . -type f -name ".DS_Store" -print0 | xargs -0 git rm --cached --ignore-unmatch
 
 # 2. Remove .env files that might be tracked
 echo "Removing any .env files from git index..."
-find . -name ".env*" -not -name ".env.example" | xargs git rm --cached
+find . -type f -name ".env*" -not -name ".env.example" -print0 | xargs -0 git rm --cached --ignore-unmatch
 
 # 3. Ensure large directories are properly ignored
 echo "Ensuring large directories are properly ignored..."
@@ -27,16 +28,24 @@ git rm --cached lpg-ui/tsconfig.tsbuildinfo 2>/dev/null || echo "File lpg-ui/tsc
 
 # 5. Update .gitignore to ensure these files don't get committed again
 echo "Updating .gitignore file..."
-cat << EOF >> .gitignore
-
-# Additional ignores
-**/.DS_Store
-**/tsconfig.tsbuildinfo
-**/*.log
-**/.vercel
-**/.git.bak
-**/module-patch.log
-EOF
+if ! grep -qxF '**/.DS_Store' .gitignore; then
+  echo '**/.DS_Store' >> .gitignore
+fi
+if ! grep -qxF '**/tsconfig.tsbuildinfo' .gitignore; then
+  echo '**/tsconfig.tsbuildinfo' >> .gitignore
+fi
+if ! grep -qxF '**/*.log' .gitignore; then
+  echo '**/*.log' >> .gitignore
+fi
+if ! grep -qxF '**/.vercel' .gitignore; then
+  echo '**/.vercel' >> .gitignore
+fi
+if ! grep -qxF '**/.git.bak' .gitignore; then
+  echo '**/.git.bak' >> .gitignore
+fi
+if ! grep -qxF '**/module-patch.log' .gitignore; then
+  echo '**/module-patch.log' >> .gitignore
+fi
 
 # 6. Stage the updated .gitignore
 git add .gitignore
