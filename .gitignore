@@ -59,3 +59,11 @@ Thumbs.db
 # Backup files
 *.bak
 **/.git.bak
+
+# Additional ignores
+**/.DS_Store
+**/tsconfig.tsbuildinfo
+**/*.log
+**/.vercel
+**/.git.bak
+**/module-patch.log
