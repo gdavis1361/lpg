@@ -7,6 +7,18 @@ const Module = require('module');
 const logFile = path.join(process.cwd(), 'module-patch.log');
 fs.writeFileSync(logFile, `Module patching started at ${new Date().toISOString()}\n`);
 
+// Log critical environment information
+const envInfo = {
+  platform: process.platform,
+  arch: process.arch, 
+  nodeVersion: process.version,
+  nodePath: process.execPath,
+  npmVersion: process.env.npm_config_user_agent,
+  vercelEnv: process.env.VERCEL_ENV || 'not-vercel'
+};
+fs.appendFileSync(logFile, `Environment: ${JSON.stringify(envInfo, null, 2)}\n`);
+fs.appendFileSync(logFile, `NODE_OPTIONS: ${process.env.NODE_OPTIONS || 'not set'}\n`);
+
 function log(message) {
   fs.appendFileSync(logFile, `${new Date().toISOString()}: ${message}\n`);
 }

@@ -1,3 +1,5 @@
+console.log('⚠️ LOADED next.config.mjs (ESM version)');
+
 /**
  * Production build configuration for Next.js
  * This file takes precedence over next.config.js when using import/export syntax

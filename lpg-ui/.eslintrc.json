@@ -2,21 +2,53 @@
   "extends": "next/core-web-vitals",
   "root": true,
   "parser": "@typescript-eslint/parser",
-  "plugins": ["@typescript-eslint"],
+  "plugins": [
+    "@typescript-eslint",
+    "local-rules",
+    "no-inline-styles"
+  ],
   "rules": {
     "@typescript-eslint/no-explicit-any": "off",
     "@typescript-eslint/no-unused-vars": "off",
     "@typescript-eslint/no-empty-interface": "off",
     "@typescript-eslint/no-empty-object-type": "off",
     "@typescript-eslint/ban-types": "off",
-    "@typescript-eslint/no-var-requires": "off"
+    "@typescript-eslint/no-var-requires": "off",
+    
+    // Rules to prevent direct Tailwind usage
+    "local-rules/no-tailwind-classes": "error",
+    
+    // Ban inline styles
+    "no-inline-styles/no-inline-styles": "error",
+    
+    // Ban className props in React components
+    "react/forbid-component-props": [
+      "error",
+      { "forbid": [{ "propName": "className", "message": "Use component library instead of direct Tailwind classes" }] }
+    ]
   },
+  "overrides": [
+    {
+      // Allow classNames in your component library files
+      "files": ["**/components/**/*.{jsx,tsx}"],
+      "rules": {
+        "react/forbid-component-props": "off",
+        "local-rules/no-tailwind-classes": "off"
+      }
+    }
+  ],
   "ignorePatterns": [
     "**/*.js",
     "**/*.mjs",
     "**/*.d.ts",
     "node_modules/",
     ".next/",
-    "src/types/supabase.ts"
-  ]
+    "src/types/supabase.ts",
+    "eslint-local-rules/"
+  ],
+  "settings": {
+    "localRules": {
+      "rulePaths": ["eslint-local-rules"]
+    }
+  }
 }

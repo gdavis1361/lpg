@@ -14,11 +14,16 @@
     "validate-env": "node scripts/validate-env.js",
     "types:supabase": "supabase gen types typescript --project-id tfvnratitcbmqqrsjamp --schema public > src/types/supabase.ts",
     "test": "vitest",
-    "diagnose": "node prestart.js && node -e \"require('./debug-config').checkNativeModules()\""
+    "diagnose": "node prestart.js && node -e \"require('./debug-config').checkNativeModules()\"",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": "eslint --fix"
   },
   "dependencies": {
     "@magicuidesign/mcp": "^1.0.6",
     "@supabase/auth-helpers-nextjs": "^0.9.0",
+    "@supabase/auth-helpers-react": "^0.5.0",
     "@supabase/supabase-js": "^2.39.7",
     "lightningcss-wasm": "^1.23.0",
     "next": "15.3.2",
@@ -36,7 +41,11 @@
     "@vitest/ui": "^1.6.0",
     "eslint": "^9",
     "eslint-config-next": "15.3.2",
+    "eslint-plugin-local-rules": "^2.0.0",
+    "eslint-plugin-no-inline-styles": "^1.0.5",
+    "husky": "^9.0.11",
     "jsdom": "^24.1.0",
+    "lint-staged": "^15.2.2",
     "shadcn-ui": "^0.9.5",
     "tailwindcss": "^4.1.7",
     "tailwindcss-animate": "^1.0.7",

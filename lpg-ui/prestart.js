@@ -26,6 +26,44 @@ log(`Platform: ${process.platform}`);
 log(`Architecture: ${process.arch}`);
 log(`Working directory: ${process.cwd()}`);
 
+// Tailwind version validation
+try {
+  log('Validating Tailwind CSS configuration:');
+  
+  // Check actual installed version
+  const tailwindPkgPath = path.join(process.cwd(), 'node_modules/tailwindcss/package.json');
+  if (fs.existsSync(tailwindPkgPath)) {
+    const tailwindPkg = require(tailwindPkgPath);
+    log(`Installed Tailwind CSS version: ${tailwindPkg.version}`);
+  } else {
+    log('Tailwind CSS package.json not found');
+  }
+  
+  // Check for v4 postcss configuration
+  const postcssConfigPath = path.join(process.cwd(), 'postcss.config.js');
+  if (fs.existsSync(postcssConfigPath)) {
+    const postcssConfig = fs.readFileSync(postcssConfigPath, 'utf8');
+    log(`PostCSS uses @tailwindcss/postcss (v4): ${postcssConfig.includes('@tailwindcss/postcss')}`);
+  }
+  
+  // Check CSS syntax
+  const globalsPath = path.join(process.cwd(), 'src/app/globals.css');
+  if (fs.existsSync(globalsPath)) {
+    const globalsCSS = fs.readFileSync(globalsPath, 'utf8');
+    log(`CSS uses v4 @theme directive: ${globalsCSS.includes('@theme inline')}`);
+    log(`CSS uses standard import syntax: ${globalsCSS.includes('@import "tailwindcss"')}`);
+  }
+  
+  // Check tailwind config
+  const tailwindConfigPath = path.join(process.cwd(), 'tailwind.config.ts');
+  if (fs.existsSync(tailwindConfigPath)) {
+    const tailwindConfig = fs.readFileSync(tailwindConfigPath, 'utf8');
+    log(`Config imports animatePlugin (common pattern): ${tailwindConfig.includes('animatePlugin')}`);
+  }
+} catch (err) {
+  log(`Error validating Tailwind: ${err.message}`);
+}
+
 // Check if we're running in Vercel
 const isVercel = !!process.env.VERCEL;
 log(`Running in Vercel: ${isVercel}`);

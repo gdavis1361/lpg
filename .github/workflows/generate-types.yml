@@ -1,0 +1,95 @@
+name: Generate Supabase Types
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'lpg-backend/supabase/migrations/**'
+  workflow_dispatch:
+    inputs:
+      branch_id:
+        description: 'Supabase branch ID to generate types from'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  generate-types:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'lpg-backend/package.json'
+      
+      # Install and configure Doppler CLI for secure environment variable access
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v2
+      
+      - name: Setup Doppler
+        run: |
+          doppler setup --no-interactive --token=${{ secrets.DOPPLER_TOKEN }} --project=lpg --config=dev
+      
+      # Install dependencies
+      - name: Install dependencies
+        working-directory: ./lpg-backend
+        run: |
+          npm install --legacy-peer-deps
+          npm install -g supabase@latest
+          
+          # Verify installations
+          echo "Node version: $(node --version)"
+          echo "NPM version: $(npm --version)"
+          echo "Supabase CLI version: $(supabase --version)"
+      
+      # Link Supabase project
+      - name: Link Supabase project
+        working-directory: ./lpg-backend
+        run: |
+          # Get Supabase project ID from Doppler
+          PROJECT_ID=$(doppler run --project lpg --config dev -- echo $SUPABASE_PROJECT_ID)
+          
+          # Link to Supabase project
+          supabase link --project-ref=$PROJECT_ID
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      
+      # Generate types
+      - name: Generate TypeScript types
+        working-directory: ./lpg-backend
+        run: |
+          # Determine if we're using a branch
+          BRANCH_OPTION=""
+          if [ -n "${{ github.event.inputs.branch_id }}" ]; then
+            BRANCH_OPTION="--branch=${{ github.event.inputs.branch_id }}"
+          fi
+          
+          # Generate types
+          doppler run --project lpg --config dev -- node scripts/generate-types.js $BRANCH_OPTION
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      
+      # Commit and push changes if there are any
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          git add lpg-ui/src/types/supabase.ts
+          
+          # Only commit if there are changes
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: update Supabase TypeScript types [skip ci]"
+            git push
+          fi
