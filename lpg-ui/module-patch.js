@@ -1,135 +1,78 @@
-// Module patching for Tailwind CSS and Lightning CSS in Vercel environment
-const fs = require('fs');
-const path = require('path');
+// This file handles platform-specific module patching for Tailwind CSS and LightningCSS
+// It's used during the build process to ensure compatibility across different environments
+
 const Module = require('module');
+const path = require('path');
+const fs = require('fs');
+const os = require('os');
 
-// Log file for diagnostics
-const logFile = path.join(process.cwd(), 'module-patch.log');
-fs.writeFileSync(logFile, `Module patching started at ${new Date().toISOString()}\n`);
+// Store the original require function
+const originalRequire = Module.prototype.require;
 
-// Log critical environment information
-const envInfo = {
-  platform: process.platform,
-  arch: process.arch, 
-  nodeVersion: process.version,
-  nodePath: process.execPath,
-  npmVersion: process.env.npm_config_user_agent,
-  vercelEnv: process.env.VERCEL_ENV || 'not-vercel'
-};
-fs.appendFileSync(logFile, `Environment: ${JSON.stringify(envInfo, null, 2)}\n`);
-fs.appendFileSync(logFile, `NODE_OPTIONS: ${process.env.NODE_OPTIONS || 'not set'}\n`);
+// Detect the platform
+const platform = os.platform();
+const arch = os.arch();
+console.log(`Detected platform: ${platform}, architecture: ${arch}`);
 
-function log(message) {
-  fs.appendFileSync(logFile, `${new Date().toISOString()}: ${message}\n`);
-}
-
-// Store the original Module._load function
-const originalLoad = Module._load;
-
-// Create a patched version that intercepts Lightning CSS native module loads
-Module._load = function(request, parent, isMain) {
-  // Logging for @tailwindcss/oxide
-  if (request.includes('@tailwindcss/oxide')) {
-    log(`[ModulePatch Custom Log] Oxide module requested: ${request}`);
-    log(`[ModulePatch Custom Log] Parent module for Oxide: ${parent ? parent.filename : 'unknown'}`);
-    try {
-      const resolvedPath = Module._resolveFilename(request, parent);
-      log(`[ModulePatch Custom Log] Resolved path for Oxide module ${request}: ${resolvedPath}`);
-      // You could add more checks here if needed, e.g., fs.existsSync(resolvedPath)
-    } catch (e) {
-      log(`[ModulePatch Custom Log] Error resolving Oxide module ${request}: ${e.message}`);
-    }
-  }
-
-  if (request.includes('lightningcss') && request.includes('.node')) {
-    log(`Intercepted native module load: ${request}`);
-    log(`Parent module: ${parent ? parent.filename : 'unknown'}`);
-    
-    // Try to load the WASM version instead
-    try {
-      log('Attempting to load WASM version instead');
-      const wasmPath = require.resolve('lightningcss-wasm');
-      log(`WASM module located at: ${wasmPath}`);
-      return originalLoad(wasmPath, parent, isMain);
-    } catch (err) {
-      log(`Failed to load WASM version: ${err.message}`);
-      // Continue to original behavior if WASM fails
-    }
-  }
+// Create a custom require function to handle platform-specific modules
+Module.prototype.require = function(...args) {
+  const modulePath = args[0];
   
-  // For Lightning CSS main module, check what it's trying to do
-  if (request === 'lightningcss' || request === 'lightningcss/node') {
-    log(`Lightningcss module requested: ${request}`);
-    log(`Parent module: ${parent ? parent.filename : 'unknown'}`);
-    
-    // Try to see what's in the module's directory
-    try {
-      const resolvedPath = require.resolve(request);
-      log(`Resolved to: ${resolvedPath}`);
+  // Handle Tailwind's oxide binaries
+  if (modulePath && modulePath.includes('@tailwindcss/oxide')) {
+    // Check if we're targeting Linux x64 but running on Darwin (macOS)
+    if (modulePath.includes('linux-x64-gnu') && platform === 'darwin') {
+      console.log(`Attempting to load incompatible Linux binary: ${modulePath}`);
       
-      const dir = path.dirname(resolvedPath);
-      const files = fs.readdirSync(dir);
-      log(`Files in directory: ${JSON.stringify(files)}`);
-    } catch (err) {
-      log(`Error examining lightningcss: ${err.message}`);
-    }
-  }
-  
-  // Continue with the original loading behavior
-  return originalLoad(request, parent, isMain);
-};
-
-// Apply patches for specific platform modules
-try {
-  // Create a shim for the missing native module
-  const shimNativeModule = () => {
-    log('Creating shim for native module');
-    
-    // Target paths that might be accessed
-    const potentialPaths = [
-      path.join(process.cwd(), 'node_modules/lightningcss/lightningcss.linux-x64-gnu.node'),
-      path.join(process.cwd(), 'node_modules/lightningcss/node/lightningcss.linux-x64-gnu.node'),
-      // Add other potential paths here
-    ];
-    
-    // Check if WASM is available
-    let wasmExports = null;
-    try {
-      // Attempt to load the WASM module and get its exports
-      const wasmModule = require('lightningcss-wasm');
-      wasmExports = wasmModule;
-      log('Successfully loaded WASM module');
-    } catch (err) {
-      log(`Failed to load WASM module: ${err.message}`);
-    }
-    
-    // Create directories if needed
-    potentialPaths.forEach(p => {
-      const dir = path.dirname(p);
-      if (!fs.existsSync(dir)) {
+      // Try to find a compatible binary or use a fallback
+      const possiblePaths = [
+        modulePath.replace('linux-x64-gnu', 'darwin-arm64'),
+        modulePath.replace('linux-x64-gnu', 'darwin-x64'),
+        '@tailwindcss/postcss'
+      ];
+      
+      for (const altPath of possiblePaths) {
         try {
-          fs.mkdirSync(dir, { recursive: true });
-          log(`Created directory: ${dir}`);
-        } catch (err) {
-          log(`Failed to create directory ${dir}: ${err.message}`);
+          console.log(`Trying alternative: ${altPath}`);
+          return originalRequire.apply(this, [altPath]);
+        } catch (e) {
+          console.log(`Alternative ${altPath} failed: ${e.message}`);
         }
       }
-    });
+      
+      // If all alternatives fail, return an empty object to prevent crashes
+      console.log('All alternatives failed, using fallback');
+      return {};
+    }
+  }
+  
+  // Handle LightningCSS binaries
+  if (modulePath && modulePath.includes('lightningcss-linux-x64-gnu') && platform === 'darwin') {
+    console.log(`Attempting to load incompatible LightningCSS Linux binary`);
     
-    return wasmExports;
-  };
+    // Try to find a compatible binary or use a fallback
+    const possiblePaths = [
+      modulePath.replace('linux-x64-gnu', 'darwin-arm64'),
+      modulePath.replace('linux-x64-gnu', 'darwin-x64'),
+      'lightningcss-wasm'
+    ];
+    
+    for (const altPath of possiblePaths) {
+      try {
+        console.log(`Trying alternative: ${altPath}`);
+        return originalRequire.apply(this, [altPath]);
+      } catch (e) {
+        console.log(`Alternative ${altPath} failed: ${e.message}`);
+      }
+    }
+    
+    // If all alternatives fail, return an empty object to prevent crashes
+    console.log('All alternatives failed, using fallback');
+    return {};
+  }
   
-  // Execute the shim creation
-  const shimResult = shimNativeModule();
-  log(`Shim created with result: ${shimResult ? 'success' : 'failure'}`);
-  
-} catch (err) {
-  log(`Error in module patching: ${err.message}`);
-  log(err.stack);
-}
-
-// Export the module for Next.js to use
-module.exports = {
-  patchApplied: true,
-  log
+  // Use the original require for all other modules
+  return originalRequire.apply(this, args);
 };
+
+console.log('Module patch applied for Tailwind CSS and LightningCSS compatibility');

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
+import QueryProvider from "@/components/providers/QueryProvider"; // Added import
 import { validateEnvVariables } from "@/lib/envValidator";
 
 validateEnvVariables(); // Call validation logic at the top level
@@ -32,7 +33,9 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <AuthProvider>
-          {children}
+          <QueryProvider> {/* Added QueryProvider */}
+            {children}
+          </QueryProvider> {/* Added QueryProvider */}
         </AuthProvider>
       </body>
     </html>

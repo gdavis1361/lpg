@@ -3,7 +3,8 @@
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { createClientComponentClient, User } from '@supabase/auth-helpers-nextjs';
-import { Database } from '@/supabase-types'; // Your generated Supabase types
+import type { Subscription } from '@supabase/supabase-js'; // Imported Subscription from core
+import { Database } from '@/types/supabase'; // Corrected path
 import logger from '@/lib/logger'; // Import the logger
 
 interface AuthContextType {
@@ -36,7 +37,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
 
     return () => {
-      authListener?.unsubscribe();
+      authListener?.subscription?.unsubscribe(); // Corrected unsubscribe call
     };
   }, [supabase]);
 
@@ -47,7 +48,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const { error, data } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          // emailRedirectTo: `${window.location.origin}/auth/callback`, // Or your desired callback URL
+          emailRedirectTo: `${window.location.origin}/auth/callback`, // Or your desired callback URL
         },
       });
       setLoading(false);

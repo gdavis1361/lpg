@@ -1,0 +1,5 @@
+Follow these steps one by one to reset and rebuild the Supabase database:
+1. supabase link --project-ref tfvnratitcbmqqrsjamp
+2. supabase db reset --linked  (Answer 'y' when prompted)
+3. supabase migrations list  (Verify migrations were applied)
+4. supabase gen types typescript --project-id tfvnratitcbmqqrsjamp --schema public  (Generate updated types)
